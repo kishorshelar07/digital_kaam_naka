@@ -41,8 +41,10 @@ const initializeSocket = (httpServer) => {
         socket.handshake.headers?.authorization?.split(' ')[1];
 
       if (!token) {
-        return next(new Error('Authentication required'));
-      }
+  socket.userId = null;
+  socket.userRole = 'guest';
+  return next();
+}
 
       const decoded = verifyToken(token);
       if (!decoded) {

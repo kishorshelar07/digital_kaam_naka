@@ -1,0 +1,11 @@
+{
+  "short_name": "Kaam Naka",
+  "name": "Digital Kaam Naka",
+  "description": "घरी बसा, काम मिळा!",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#F97316",
+  "background_color": "#ffffff",
+  "orientation": "portrait",
+  "icons": []
+}
