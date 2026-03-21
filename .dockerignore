@@ -1,0 +1,28 @@
+# Environment — MOST IMPORTANT
+.env
+.env.*
+*.env
+
+# Dependencies (already installed via npm ci)
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Git
+.git
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Build outputs
+dist/
+build/
+coverage/
