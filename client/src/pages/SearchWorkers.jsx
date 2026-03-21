@@ -97,9 +97,9 @@ const SearchWorkers = () => {
                     style={{
                       flex: 1, padding: '6px 4px', border: '1px solid', borderRadius: 6,
                       cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                      borderColor: filters.minRating == r ? 'var(--color-primary)' : 'var(--color-border)',
-                      background: filters.minRating == r ? 'var(--color-primary-light)' : 'white',
-                      color: filters.minRating == r ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      borderColor: filters.minRating === String(r) ? 'var(--color-primary)' : 'var(--color-border)',
+                      background: filters.minRating === String(r) ? 'var(--color-primary-light)' : 'white',
+                      color: filters.minRating === String(r) ? 'var(--color-primary)' : 'var(--color-text-muted)',
                     }}>
                     {r ? `${r}★+` : 'सर्व'}
                   </button>

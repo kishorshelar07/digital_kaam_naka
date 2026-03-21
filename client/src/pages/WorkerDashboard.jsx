@@ -15,7 +15,6 @@ import { useAuth } from '../context/AuthContext';
 import { workerService, bookingService } from '../services/authService';
 import BookingStatusBadge from '../components/booking/BookingStatus';
 import { CardSkeleton } from '../components/common/Loader';
-import Loader from '../components/common/Loader';
 
 const WorkerDashboard = () => {
   const { t } = useTranslation();
@@ -27,7 +26,6 @@ const WorkerDashboard = () => {
   const [loading, setLoading]           = useState(true);
   const [toggling, setToggling]         = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(null);
   const [showAvailModal, setShowAvailModal] = useState(false);
 const [radius, setRadius]                 = useState(20);
 const [detectedLocation, setDetectedLocation] = useState(null);

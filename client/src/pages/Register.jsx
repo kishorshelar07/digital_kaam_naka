@@ -28,7 +28,7 @@ const EMPLOYER_TYPES = [
 ];
 
 const Register = () => {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const { loginSuccess } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
