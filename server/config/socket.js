@@ -40,7 +40,7 @@ const initializeSocket = (httpServer) => {
         socket.handshake.auth?.token ||
         socket.handshake.headers?.authorization?.split(' ')[1];
 
-      if (!token) {
+if (!token) {
   socket.userId = null;
   socket.userRole = 'guest';
   return next();
