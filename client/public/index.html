@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="mr" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#F97316" />
+  <meta name="description" content="Digital Kaam Naka — महाराष्ट्रातील नाक्याची परंपरा आता डिजिटल! घरी बसा, काम मिळा!" />
+  <meta name="keywords" content="kaam naka, digital naka, worker hiring, Maharashtra workers, daily wage workers, kaamgar" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Digital Kaam Naka — घरी बसा, काम मिळा!" />
+  <meta property="og:description" content="महाराष्ट्रातील नाक्याची परंपरा आता डिजिटल! Worker आणि Employer यांना जोडणारे platform." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://digitalkamnaka.in" />
+
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/favicon.ico" />
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+  <!-- Noto Sans Font: supports Marathi, Hindi, English -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Leaflet CSS for maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <title>Digital Kaam Naka — घरी बसा, काम मिळा!</title>
+
+  <style>
+    /* Critical CSS — prevents layout shift before React loads */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans', Arial, sans-serif; background: #F9FAFB; color: #111827; }
+    #root { min-height: 100vh; }
+
+    /* Loading screen */
+    #initial-loader {
+      position: fixed; inset: 0; background: white;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; z-index: 9999;
+      transition: opacity 0.3s ease;
+    }
+    .loader-logo { font-size: 64px; animation: bounce 1s infinite; }
+    .loader-text { font-size: 18px; font-weight: 700; color: #F97316; }
+    .loader-sub { font-size: 14px; color: #6B7280; }
+    .loader-bar {
+      width: 200px; height: 4px; background: #E5E7EB;
+      border-radius: 999px; overflow: hidden;
+    }
+    .loader-bar-fill {
+      height: 100%; width: 40%; background: #F97316;
+      border-radius: 999px;
+      animation: loading 1.5s ease infinite;
+    }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+  </style>
+</head>
+<body>
+  <noscript>JavaScript आवश्यक आहे. कृपया JavaScript सक्षम करा.</noscript>
+
+  <!-- Loading screen (hidden when React renders) -->
+  <div id="initial-loader">
+    <div class="loader-logo">🏗️</div>
+    <div class="loader-text">Digital Kaam Naka</div>
+    <div class="loader-sub">घरी बसा, काम मिळा!</div>
+    <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+  </div>
+
+  <div id="root"></div>
+
+  <script>
+    // Hide loader when React has mounted
+    window.addEventListener('load', function() {
+      var loader = document.getElementById('initial-loader');
+      if (loader) {
+        setTimeout(function() {
+          loader.style.opacity = '0';
+          setTimeout(function() { loader.style.display = 'none'; }, 300);
+        }, 500);
+      }
+    });
+  </script>
+</body>
+</html>

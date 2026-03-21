@@ -1,0 +1,62 @@
+{
+  "app": { "name": "Digital Kaam Naka", "tagline": "Stay Home, Get Work!", "loading": "Loading..." },
+  "nav": {
+    "home": "Home", "search": "Search", "postJob": "Post Job", "bookings": "Bookings",
+    "profile": "Profile", "login": "Login", "register": "Register", "logout": "Logout",
+    "dashboard": "Dashboard", "notifications": "Notifications", "settings": "Settings"
+  },
+  "home": {
+    "hero": {
+      "title": "Digital Kaam Naka", "subtitle": "Stay Home, Get Work!",
+      "description": "Maharashtra's Naka tradition — now digital! Mark yourself available from home and get hired.",
+      "searchPlaceholder": "Search work or skills...", "locationPlaceholder": "Your city or district",
+      "searchBtn": "Search", "findWorkers": "Find Workers", "postWork": "Post Work"
+    },
+    "howItWorks": {
+      "title": "How It Works?",
+      "step1": { "title": "Register", "desc": "Easy sign up with phone number" },
+      "step2": { "title": "Go Available", "desc": "Toggle today's availability ON/OFF" },
+      "step3": { "title": "Get Booked", "desc": "Employer books you for the day" },
+      "step4": { "title": "Work & Earn", "desc": "Complete work, receive payment" }
+    },
+    "categories": { "title": "Job Categories", "subtitle": "Find work matching your skills" },
+    "stats": { "workers": "Registered Workers", "cities": "Cities", "bookings": "Successful Bookings", "employers": "Employers" }
+  },
+  "auth": {
+    "phone": "Mobile Number", "phonePlaceholder": "10-digit mobile number", "getOtp": "Send OTP",
+    "enterOtp": "Enter OTP", "otpSent": "OTP sent successfully", "otpPlaceholder": "6-digit OTP",
+    "verifyOtp": "Verify OTP", "resendOtp": "Resend OTP",
+    "iAmWorker": "I am a Worker", "iAmEmployer": "I am an Employer",
+    "workerDesc": "I do construction, farming, household and other work",
+    "employerDesc": "I need workers, I have work to offer",
+    "name": "Full Name", "namePlaceholder": "Enter your name", "city": "City", "district": "District",
+    "dailyRate": "Daily Rate (₹)", "experience": "Experience (years)", "skills": "Skills",
+    "language": "Select Language", "complete": "Complete Registration"
+  },
+  "worker": {
+    "dashboard": {
+      "greeting": "Hello, {{name}}! 👋", "availableToggle": "Available Today",
+      "notAvailable": "Not Available Today", "toggleOn": "Go Available", "toggleOff": "Go Unavailable",
+      "pendingRequests": "Pending Requests", "totalJobs": "Total Jobs", "rating": "Rating",
+      "monthEarnings": "This Month's Earnings"
+    }
+  },
+  "booking": {
+    "accept": "Accept ✅", "reject": "Reject ❌", "start": "Start Work 🔨",
+    "complete": "Complete Work ✅", "cancel": "Cancel", "pending": "Pending",
+    "accepted": "Accepted", "rejected": "Rejected", "started": "In Progress",
+    "completed": "Completed", "cancelled": "Cancelled", "rate": "Daily Rate", "days": "days",
+    "total": "Total Amount", "confirm": "Confirm Booking", "noBookings": "No bookings found"
+  },
+  "common": {
+    "save": "Save", "cancel": "Cancel", "confirm": "Confirm", "edit": "Edit",
+    "submit": "Submit", "back": "Back", "next": "Next", "loading": "Loading...",
+    "error": "Something went wrong. Please try again.", "success": "Success!", "perDay": "per day",
+    "verified": "Verified ✅", "noData": "No data available", "viewAll": "View All", "close": "Close"
+  },
+  "errors": {
+    "phoneRequired": "Mobile number is required", "phoneInvalid": "Enter a valid 10-digit Indian mobile number",
+    "otpRequired": "OTP is required", "otpInvalid": "OTP must be exactly 6 digits",
+    "nameRequired": "Name is required", "networkError": "Please check your internet connection"
+  }
+}

@@ -1,0 +1,84 @@
+# ================================================================
+# docker-compose.yml — Local Development Environment
+# Runs: Node.js API + PostgreSQL + pgAdmin
+# Usage: docker-compose up
+# Author: Digital Kaam Naka Dev Team
+# ================================================================
+
+version: '3.9'
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────────
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: kamnaka_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kamnaka_db
+      POSTGRES_USER: kamnaka_user
+      POSTGRES_PASSWORD: kamnaka_pass_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - kamnaka_pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./database/seed_categories.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kamnaka_user -d kamnaka_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Node.js API Server ───────────────────────────────────────
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: kamnaka_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: kamnaka_db
+      DB_USER: kamnaka_user
+      DB_PASS: kamnaka_pass_2024
+      CLIENT_URL: http://localhost:3000
+      JWT_SECRET: dev_secret_change_this_in_production_min32
+      JWT_EXPIRE: 7d
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # ── pgAdmin Web UI (Database Browser) ──────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: kamnaka_pgadmin
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@kamnaka.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    volumes:
+      - kamnaka_pgadmin:/var/lib/pgadmin
+
+  # ── React Frontend (Production build) ───────────────────────
+  # For dev, run: cd client && npm start
+  # client:
+  #   build: ./client
+  #   ports:
+  #     - "3000:3000"
+
+volumes:
+  kamnaka_pgdata:
+  kamnaka_pgadmin:

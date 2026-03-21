@@ -1,0 +1,292 @@
+{
+  "app": {
+    "name": "Digital Kaam Naka",
+    "tagline": "घरी बसा, काम मिळा!",
+    "loading": "लोड होत आहे..."
+  },
+  "nav": {
+    "home": "मुख्यपान",
+    "search": "शोधा",
+    "postJob": "काम टाका",
+    "bookings": "बुकिंग्स",
+    "profile": "प्रोफाइल",
+    "login": "लॉग इन",
+    "register": "नोंदणी",
+    "logout": "बाहेर पडा",
+    "dashboard": "डॅशबोर्ड",
+    "notifications": "सूचना",
+    "settings": "सेटिंग्स"
+  },
+  "home": {
+    "hero": {
+      "title": "डिजिटल काम नाका",
+      "subtitle": "घरी बसा, काम मिळा!",
+      "description": "महाराष्ट्रातील नाक्याची परंपरा आता डिजिटल! घरून उपलब्धता नोंदवा आणि काम मिळवा.",
+      "searchPlaceholder": "काम किंवा कौशल्य शोधा...",
+      "locationPlaceholder": "तुमचे शहर किंवा जिल्हा",
+      "searchBtn": "शोधा",
+      "findWorkers": "कामगार शोधा",
+      "postWork": "काम टाका"
+    },
+    "howItWorks": {
+      "title": "कसे काम करते?",
+      "step1": { "title": "नोंदणी करा", "desc": "फोन नंबरने सहज नोंदणी" },
+      "step2": { "title": "उपलब्ध व्हा", "desc": "आजचे काम ON/OFF करा" },
+      "step3": { "title": "बुक करा", "desc": "मालकाने कामगार बुक केला" },
+      "step4": { "title": "काम करा", "desc": "काम करा, पैसे मिळवा" }
+    },
+    "categories": {
+      "title": "काम प्रकार",
+      "subtitle": "तुमच्या कौशल्यानुसार काम शोधा"
+    },
+    "stats": {
+      "workers": "नोंदणीकृत कामगार",
+      "cities": "शहरे",
+      "bookings": "यशस्वी बुकिंग्स",
+      "employers": "मालक"
+    },
+    "testimonials": {
+      "title": "त्यांनी काय म्हटले?"
+    }
+  },
+  "auth": {
+    "phone": "मोबाइल नंबर",
+    "phonePlaceholder": "10 अंकी मोबाइल नंबर",
+    "getOtp": "OTP पाठवा",
+    "enterOtp": "OTP टाका",
+    "otpSent": "OTP पाठवला गेला",
+    "otpPlaceholder": "6 अंकी OTP",
+    "verifyOtp": "OTP तपासा",
+    "resendOtp": "OTP पुन्हा पाठवा",
+    "resendIn": "{{seconds}} सेकंदात पुन्हा पाठवा",
+    "iAmWorker": "मी कामगार आहे",
+    "iAmEmployer": "मी मालक आहे",
+    "workerDesc": "बांधकाम, शेती, घरकाम आणि इतर कामे करतो",
+    "employerDesc": "कामगार हवे आहेत, काम देणार आहे",
+    "name": "पूर्ण नाव",
+    "namePlaceholder": "तुमचे नाव टाका",
+    "city": "शहर",
+    "district": "जिल्हा",
+    "dailyRate": "रोजंदारी (₹)",
+    "dailyRatePlaceholder": "उदा. ₹500",
+    "experience": "अनुभव (वर्षे)",
+    "skills": "कौशल्ये",
+    "selectSkills": "तुमची कौशल्ये निवडा",
+    "language": "भाषा निवडा",
+    "complete": "नोंदणी पूर्ण करा",
+    "alreadyRegistered": "आधीच नोंदणी केली आहे?",
+    "loginHere": "येथे लॉग इन करा"
+  },
+  "worker": {
+    "dashboard": {
+      "greeting": "नमस्कार, {{name}}! 👋",
+      "availableToggle": "आज उपलब्ध आहे",
+      "notAvailable": "आज उपलब्ध नाही",
+      "toggleOn": "उपलब्ध व्हा",
+      "toggleOff": "अनुपलब्ध व्हा",
+      "pendingRequests": "प्रलंबित बुकिंग",
+      "activeBooking": "सध्याचे काम",
+      "noBookings": "सध्या कोणतेही बुकिंग नाही",
+      "totalJobs": "एकूण काम",
+      "rating": "रेटिंग",
+      "monthEarnings": "या महिन्याची कमाई",
+      "viewProfile": "माझा प्रोफाइल"
+    },
+    "availability": {
+      "title": "आजची उपलब्धता",
+      "startTime": "सुरुवात वेळ",
+      "endTime": "शेवट वेळ",
+      "radius": "किती किमी पर्यंत जाल?",
+      "updateLocation": "माझे स्थान अपडेट करा",
+      "saved": "उपलब्धता जतन केली! ✅"
+    },
+    "profile": {
+      "verified": "पडताळलेला कामगार ✅",
+      "unverified": "पडताळणी बाकी",
+      "dailyRate": "रोजंदारी",
+      "perDay": "प्रती दिवस",
+      "experience": "अनुभव",
+      "years": "वर्षे",
+      "skills": "कौशल्ये",
+      "about": "माझ्याबद्दल",
+      "workHistory": "काम इतिहास",
+      "reviews": "अभिप्राय",
+      "bookNow": "आत्ता बुक करा",
+      "noReviews": "अजून कोणी अभिप्राय दिला नाही"
+    },
+    "earnings": {
+      "title": "माझी कमाई",
+      "thisMonth": "या महिन्यात",
+      "lifetime": "एकूण कमाई",
+      "jobsCount": "केलेली कामे",
+      "chart": "कमाईचा आलेख"
+    }
+  },
+  "employer": {
+    "dashboard": {
+      "greeting": "नमस्कार, {{name}}! 👋",
+      "postJob": "+ नवीन काम टाका",
+      "activeJobs": "सक्रिय जाहिराती",
+      "recentBookings": "अलीकडील बुकिंग",
+      "nearbyWorkers": "जवळचे कामगार",
+      "savedWorkers": "माझी टीम",
+      "totalPosts": "एकूण जाहिराती",
+      "totalHires": "एकूण कामगार",
+      "rating": "रेटिंग"
+    }
+  },
+  "booking": {
+    "request": "बुकिंग request",
+    "accept": "स्वीकारा ✅",
+    "reject": "नाकारा ❌",
+    "start": "काम सुरू झाले 🔨",
+    "complete": "काम पूर्ण झाले ✅",
+    "cancel": "रद्द करा",
+    "pending": "प्रलंबित",
+    "accepted": "स्वीकारले",
+    "rejected": "नाकारले",
+    "started": "सुरू आहे",
+    "completed": "पूर्ण झाले",
+    "cancelled": "रद्द",
+    "rate": "रोजंदारी",
+    "days": "दिवस",
+    "total": "एकूण रक्कम",
+    "date": "तारीख",
+    "note": "नोंद",
+    "notePlaceholder": "मालकासाठी अतिरिक्त माहिती...",
+    "confirm": "बुकिंग confirm करा",
+    "cancelReason": "रद्द करण्याचे कारण",
+    "noBookings": "कोणतेही बुकिंग नाही"
+  },
+  "job": {
+    "post": {
+      "title": "नवीन काम टाका",
+      "category": "काम प्रकार",
+      "jobTitle": "काम नाव",
+      "description": "काम वर्णन",
+      "workersNeeded": "किती कामगार हवेत?",
+      "dailyRate": "रोजंदारी (₹)",
+      "jobDate": "काम तारीख",
+      "duration": "किती दिवस?",
+      "location": "काम ठिकाण",
+      "address": "पत्ता",
+      "urgent": "तातडीचे काम 🚨",
+      "preview": "पूर्वावलोकन",
+      "submit": "काम टाका",
+      "step1": "काम माहिती",
+      "step2": "तारीख व दर",
+      "step3": "ठिकाण"
+    },
+    "card": {
+      "urgent": "तातडीचे! 🚨",
+      "workersNeeded": "{{count}} कामगार हवेत",
+      "perDay": "प्रती दिवस",
+      "applyNow": "अर्ज करा",
+      "viewDetails": "तपशील पाहा",
+      "open": "उपलब्ध",
+      "filled": "भरले",
+      "daysLeft": "{{count}} दिवस बाकी"
+    }
+  },
+  "payment": {
+    "title": "पेमेंट",
+    "cash": "रोख रक्कम",
+    "upi": "UPI",
+    "card": "कार्ड",
+    "amount": "रक्कम",
+    "platformFee": "सेवा शुल्क",
+    "workerGets": "कामगाराला मिळते",
+    "payNow": "आत्ता पेमेंट करा",
+    "confirmCash": "रोख पेमेंट झाले",
+    "success": "पेमेंट यशस्वी! ✅",
+    "failed": "पेमेंट अयशस्वी",
+    "history": "पेमेंट इतिहास"
+  },
+  "rating": {
+    "title": "रेटिंग द्या",
+    "howWasWork": "काम कसे होते?",
+    "howWasWorker": "कामगार कसे होते?",
+    "howWasEmployer": "मालक कसे होते?",
+    "writeReview": "अभिप्राय लिहा (ऐच्छिक)",
+    "reviewPlaceholder": "तुमचा अनुभव सांगा...",
+    "submit": "रेटिंग सादर करा",
+    "thankYou": "रेटिंग दिल्याबद्दल धन्यवाद! ⭐",
+    "stars": {
+      "1": "खूपच खराब",
+      "2": "खराब",
+      "3": "ठीक आहे",
+      "4": "चांगले",
+      "5": "उत्कृष्ट"
+    }
+  },
+  "search": {
+    "title": "कामगार शोधा",
+    "filters": "फिल्टर",
+    "category": "काम प्रकार",
+    "maxRate": "जास्तीत जास्त रोजंदारी",
+    "minRating": "कमीत कमी रेटिंग",
+    "distance": "अंतर (किमी)",
+    "availableToday": "आज उपलब्ध",
+    "sortBy": "क्रमवारी",
+    "sortRating": "रेटिंगनुसार",
+    "sortDistance": "अंतरानुसार",
+    "sortRate": "दरानुसार",
+    "mapView": "नकाशा दृश्य",
+    "listView": "यादी दृश्य",
+    "noResults": "कोणताही कामगार सापडला नाही",
+    "tryAdjusting": "फिल्टर बदलून पुन्हा प्रयत्न करा"
+  },
+  "notifications": {
+    "title": "सूचना",
+    "all": "सर्व",
+    "unread": "न वाचलेल्या",
+    "markAllRead": "सर्व वाचले",
+    "noNotifications": "कोणत्याही सूचना नाहीत",
+    "newBooking": "नवीन बुकिंग!",
+    "bookingAccepted": "बुकिंग स्वीकारली!",
+    "bookingRejected": "बुकिंग नाकारली",
+    "workComplete": "काम पूर्ण!",
+    "paymentDone": "पेमेंट झाले! 💰"
+  },
+  "common": {
+    "save": "जतन करा",
+    "cancel": "रद्द करा",
+    "confirm": "पक्के करा",
+    "edit": "बदला",
+    "delete": "हटवा",
+    "submit": "सादर करा",
+    "back": "मागे",
+    "next": "पुढे",
+    "done": "झाले",
+    "loading": "लोड होत आहे...",
+    "error": "काहीतरी चुकले. पुन्हा प्रयत्न करा.",
+    "success": "यश!",
+    "required": "हे आवश्यक आहे",
+    "optional": "(ऐच्छिक)",
+    "perDay": "प्रती दिवस",
+    "km": "किमी",
+    "rating": "रेटिंग",
+    "reviews": "अभिप्राय",
+    "verified": "पडताळलेले ✅",
+    "distance": "अंतर",
+    "noData": "कोणताही डेटा नाही",
+    "viewAll": "सर्व पाहा",
+    "close": "बंद करा",
+    "tryAgain": "पुन्हा प्रयत्न करा"
+  },
+  "errors": {
+    "phoneRequired": "मोबाइल नंबर आवश्यक आहे",
+    "phoneInvalid": "योग्य 10 अंकी भारतीय मोबाइल नंबर टाका",
+    "otpRequired": "OTP आवश्यक आहे",
+    "otpInvalid": "OTP 6 अंकी असणे आवश्यक आहे",
+    "otpExpired": "OTP कालबाह्य झाला. नवीन OTP मागवा.",
+    "otpWrong": "चुकीचा OTP. पुन्हा प्रयत्न करा.",
+    "nameRequired": "नाव आवश्यक आहे",
+    "rateRequired": "रोजंदारी आवश्यक आहे",
+    "cityRequired": "शहर आवश्यक आहे",
+    "networkError": "इंटरनेट कनेक्शन तपासा",
+    "serverError": "सर्व्हर त्रुटी. नंतर पुन्हा प्रयत्न करा.",
+    "unauthorized": "कृपया प्रथम लॉग इन करा",
+    "forbidden": "हे करण्याची परवानगी नाही"
+  }
+}

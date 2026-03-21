@@ -1,0 +1,61 @@
+{
+  "app": { "name": "Digital Kaam Naka", "tagline": "घर बैठे, काम पाओ!", "loading": "लोड हो रहा है..." },
+  "nav": {
+    "home": "होम", "search": "खोजें", "postJob": "काम डालें", "bookings": "बुकिंग",
+    "profile": "प्रोफाइल", "login": "लॉग इन", "register": "पंजीकरण", "logout": "लॉग आउट",
+    "dashboard": "डैशबोर्ड", "notifications": "सूचनाएं", "settings": "सेटिंग्स"
+  },
+  "home": {
+    "hero": {
+      "title": "डिजिटल काम नाका", "subtitle": "घर बैठे, काम पाओ!",
+      "description": "महाराष्ट्र की नाका परंपरा अब डिजिटल! घर से उपलब्धता दर्ज करें और काम पाएं।",
+      "searchPlaceholder": "काम या कौशल खोजें...", "locationPlaceholder": "आपका शहर या जिला",
+      "searchBtn": "खोजें", "findWorkers": "मजदूर खोजें", "postWork": "काम डालें"
+    },
+    "howItWorks": {
+      "title": "कैसे काम करता है?",
+      "step1": { "title": "पंजीकरण करें", "desc": "फोन नंबर से आसान पंजीकरण" },
+      "step2": { "title": "उपलब्ध हों", "desc": "आज का काम ON/OFF करें" },
+      "step3": { "title": "बुक करें", "desc": "मालिक ने मजदूर बुक किया" },
+      "step4": { "title": "काम करें", "desc": "काम करें, पैसे पाएं" }
+    },
+    "categories": { "title": "काम प्रकार", "subtitle": "अपने कौशल के अनुसार काम खोजें" },
+    "stats": { "workers": "पंजीकृत मजदूर", "cities": "शहर", "bookings": "सफल बुकिंग", "employers": "नियोक्ता" }
+  },
+  "auth": {
+    "phone": "मोबाइल नंबर", "phonePlaceholder": "10 अंकी मोबाइल नंबर", "getOtp": "OTP भेजें",
+    "enterOtp": "OTP दर्ज करें", "otpSent": "OTP भेज दिया गया", "otpPlaceholder": "6 अंकी OTP",
+    "verifyOtp": "OTP सत्यापित करें", "resendOtp": "OTP फिर भेजें",
+    "iAmWorker": "मैं मजदूर हूं", "iAmEmployer": "मैं मालिक हूं",
+    "workerDesc": "निर्माण, खेती, घर का काम करता हूं", "employerDesc": "मजदूर चाहिए, काम देना है",
+    "name": "पूरा नाम", "namePlaceholder": "आपका नाम दर्ज करें", "city": "शहर", "district": "जिला",
+    "dailyRate": "दैनिक मजदूरी (₹)", "experience": "अनुभव (वर्ष)", "skills": "कौशल",
+    "language": "भाषा चुनें", "complete": "पंजीकरण पूरा करें"
+  },
+  "worker": {
+    "dashboard": {
+      "greeting": "नमस्ते, {{name}}! 👋", "availableToggle": "आज उपलब्ध हूं",
+      "notAvailable": "आज उपलब्ध नहीं", "toggleOn": "उपलब्ध हों", "toggleOff": "अनुपलब्ध हों",
+      "pendingRequests": "लंबित बुकिंग", "totalJobs": "कुल काम", "rating": "रेटिंग",
+      "monthEarnings": "इस महीने की कमाई"
+    }
+  },
+  "booking": {
+    "accept": "स्वीकार करें ✅", "reject": "अस्वीकार करें ❌", "start": "काम शुरू हुआ 🔨",
+    "complete": "काम पूरा ✅", "cancel": "रद्द करें", "pending": "लंबित",
+    "accepted": "स्वीकृत", "rejected": "अस्वीकृत", "started": "शुरू है",
+    "completed": "पूरा हुआ", "cancelled": "रद्द", "rate": "दैनिक दर", "days": "दिन",
+    "total": "कुल राशि", "confirm": "बुकिंग पक्की करें", "noBookings": "कोई बुकिंग नहीं"
+  },
+  "common": {
+    "save": "सहेजें", "cancel": "रद्द करें", "confirm": "पक्का करें", "edit": "संपादित करें",
+    "submit": "सबमिट करें", "back": "वापस", "next": "आगे", "loading": "लोड हो रहा है...",
+    "error": "कुछ गलत हुआ। पुनः प्रयास करें।", "success": "सफलता!", "perDay": "प्रति दिन",
+    "verified": "सत्यापित ✅", "noData": "कोई डेटा नहीं", "viewAll": "सभी देखें", "close": "बंद करें"
+  },
+  "errors": {
+    "phoneRequired": "मोबाइल नंबर आवश्यक है", "phoneInvalid": "वैध 10 अंकी भारतीय मोबाइल नंबर दर्ज करें",
+    "otpRequired": "OTP आवश्यक है", "otpInvalid": "OTP 6 अंकी होना चाहिए",
+    "nameRequired": "नाम आवश्यक है", "networkError": "इंटरनेट कनेक्शन जांचें"
+  }
+}
