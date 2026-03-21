@@ -14,7 +14,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 import { workerService, bookingService } from '../services/authService';
 import BookingStatusBadge from '../components/booking/BookingStatus';
-import { CardSkeleton } from '../components/common/Loader';
+import Loader, { CardSkeleton } from '../components/common/Loader';
 
 const WorkerDashboard = () => {
   const { t } = useTranslation();
@@ -27,9 +27,9 @@ const WorkerDashboard = () => {
   const [toggling, setToggling]         = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [showAvailModal, setShowAvailModal] = useState(false);
-const [radius, setRadius]                 = useState(20);
-const [detectedLocation, setDetectedLocation] = useState(null);
-const [submitting, setSubmitting]         = useState(false);
+  const [radius, setRadius]                 = useState(20);
+  const [detectedLocation, setDetectedLocation] = useState(null);
+  const [submitting, setSubmitting]         = useState(false);
 
   const loadDashboardData = useCallback(async () => {
     if (!user) return;
