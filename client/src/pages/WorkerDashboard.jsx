@@ -4,7 +4,7 @@
  * THE most important page: the "Aaj Uplabdh Ahe" toggle.
  * This is the digital equivalent of showing up at the Naka.
  * Author: Digital Kaam Naka Dev Team
- * ================================================================
+ * ===================================================================
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
