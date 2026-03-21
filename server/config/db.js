@@ -1,68 +1,71 @@
 /**
  * config/db.js — Database Configuration
+ * Uses DATABASE_URL for production (Render + Supabase)
  * Author: Digital Kaam Naka Dev Team
  */
 
 const { Sequelize } = require('sequelize');
 const logger = require('../utils/logger');
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'kaamnaka_db',
-  process.env.DB_USER || 'postgres',
-  process.env.DB_PASS || '',
-  {
-    host:    process.env.DB_HOST || 'localhost',
-    port:    parseInt(process.env.DB_PORT) || 5432,
+let sequelize;
+
+// Production: use DATABASE_URL directly
+if (process.env.DATABASE_URL) {
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
-
-    pool: {
-      max:     10,
-      min:     2,
-      acquire: 30000,
-      idle:    10000,
-    },
-
     logging: false,
-
+    pool: { max: 10, min: 2, acquire: 30000, idle: 10000 },
     dialectOptions: {
-      ssl: process.env.NODE_ENV === 'production'
-        ? { require: true, rejectUnauthorized: false }
-        : false,
+      ssl: { require: true, rejectUnauthorized: false },
     },
-
     define: {
-      underscored:    true,
-      timestamps:     true,
+      underscored: true,
+      timestamps: true,
       freezeTableName: true,
     },
-  }
-);
+  });
+} else {
+  // Development: use individual env vars
+  sequelize = new Sequelize(
+    process.env.DB_NAME || 'kaamnaka_db',
+    process.env.DB_USER || 'postgres',
+    process.env.DB_PASS || '',
+    {
+      host:    process.env.DB_HOST || 'localhost',
+      port:    parseInt(process.env.DB_PORT) || 5432,
+      dialect: 'postgres',
+      logging: false,
+      pool: { max: 10, min: 2, acquire: 30000, idle: 10000 },
+      dialectOptions: { ssl: false },
+      define: {
+        underscored: true,
+        timestamps: true,
+        freezeTableName: true,
+      },
+    }
+  );
+}
 
 const connectDB = async () => {
   try {
+    logger.info('Connecting to database...');
+    logger.info('Using DATABASE_URL:', process.env.DATABASE_URL ? 'YES' : 'NO');
+
     await sequelize.authenticate();
     logger.info('✅ PostgreSQL connected successfully');
 
     try {
       await sequelize.query('CREATE EXTENSION IF NOT EXISTS postgis;');
       logger.info('✅ PostGIS extension enabled');
-    } catch (postgisErr) {
-      logger.warn('PostGIS not available:', postgisErr.message);
+    } catch (e) {
+      logger.warn('PostGIS skip:', e.message);
     }
 
-    // ❌ NO sync in production — schema already created via schema.sql
-    if (process.env.NODE_ENV === 'development') {
-      logger.info('✅ Database ready — development mode');
-    } else {
-      logger.info('✅ Database ready — production mode');
-    }
+    logger.info('✅ Database ready');
 
   } catch (error) {
     logger.error('❌ Database connection failed:', error.message);
-    logger.error('Host:', process.env.DB_HOST);
-    logger.error('Database:', process.env.DB_NAME);
-    logger.error('User:', process.env.DB_USER);
-    logger.error('SSL:', process.env.NODE_ENV === 'production' ? 'enabled' : 'disabled');
+    logger.error('DATABASE_URL set:', !!process.env.DATABASE_URL);
     process.exit(1);
   }
 };
