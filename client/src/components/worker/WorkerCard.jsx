@@ -5,32 +5,41 @@ import { useTranslation } from 'react-i18next';
 const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  // CHANGED: worker.user → worker.userId (MongoDB populated field)
   const user = worker?.userId || {};
 
+  // FIX: skill.categoryId is the populated category object
   const getSkillName = (skill) => {
-    if (!skill?.category) return '';
-    const map = { mr: skill.category.nameMr, hi: skill.category.nameHi, en: skill.category.nameEn };
-    return map[lang] || skill.category.nameEn;
+    const cat = skill?.categoryId;
+    if (!cat) return '';
+    const map = { mr: cat.nameMr, hi: cat.nameHi, en: cat.nameEn };
+    return map[lang] || cat.nameEn || '';
   };
 
-  const levelColor = { beginner: 'badge-secondary', experienced: 'badge-primary', expert: 'badge-warning' };
+  const levelColor = {
+    beginner:   'badge-secondary',
+    experienced:'badge-primary',
+    expert:     'badge-warning',
+  };
 
   return (
     <div className="card worker-card fade-in">
       <div className="card-body">
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <img
-              src={user.profilePhoto || `https://ui-avatars.com/api/?name=${user.name || 'W'}&background=F97316&color=fff&size=64`}
-              alt={user.name}
+              src={user.profilePhoto ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'W')}&background=F97316&color=fff&size=64`}
+              alt={user.name || 'Worker'}
               className="profile-avatar"
+              loading="lazy"
             />
-            {worker.isAvailable && <span className="available-dot" title="आज उपलब्ध" />}
+            {worker.isAvailable && (
+              <span className="available-dot" title="आज उपलब्ध" aria-label="Available today" />
+            )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {/* CHANGED: worker.id → worker._id */}
               <Link
                 to={`/workers/${worker._id}`}
                 style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-text)', textDecoration: 'none' }}
@@ -54,11 +63,14 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
           </div>
         </div>
 
+        {/* Skills */}
         {worker.skills?.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-            {/* CHANGED: skill.id → skill._id */}
-            {worker.skills.slice(0, 3).map(skill => (
-              <span key={skill._id} className={`badge ${levelColor[skill.level] || 'badge-secondary'}`}>
+            {worker.skills.slice(0, 3).map((skill, idx) => (
+              <span
+                key={skill._id || idx}
+                className={`badge ${levelColor[skill.level] || 'badge-secondary'}`}
+              >
                 {getSkillName(skill)}
               </span>
             ))}
@@ -68,10 +80,11 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
           </div>
         )}
 
+        {/* Stats row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-primary)' }}>
-              ₹{parseInt(worker.dailyRate).toLocaleString()}
+              ₹{parseInt(worker.dailyRate || 0).toLocaleString()}
             </div>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t('common.perDay')}</div>
           </div>
@@ -88,6 +101,7 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
           </div>
         </div>
 
+        {/* Availability */}
         <div style={{ marginBottom: 12 }}>
           {worker.isAvailable
             ? <span className="badge badge-success" style={{ fontSize: 12 }}>🟢 आज उपलब्ध</span>
@@ -95,14 +109,21 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
           }
         </div>
 
+        {/* Actions */}
         <div style={{ display: 'flex', gap: 8 }}>
-          {/* CHANGED: worker.id → worker._id */}
-          <Link to={`/workers/${worker._id}`} className="btn btn-outline btn-sm" style={{ flex: 1, textDecoration: 'none' }}>
+          <Link
+            to={`/workers/${worker._id}`}
+            className="btn btn-outline btn-sm"
+            style={{ flex: 1, textDecoration: 'none' }}
+          >
             प्रोफाइल पाहा
           </Link>
           {showBookBtn && worker.isAvailable && (
-            <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
-              onClick={() => onBook && onBook(worker)}>
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ flex: 1 }}
+              onClick={() => onBook && onBook(worker)}
+            >
               📅 बुक करा
             </button>
           )}

@@ -2,7 +2,6 @@ import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import 'bootstrap/dist/css/bootstrap.min.css';
 import './styles/global.css';
 import './i18n/i18n';
 
@@ -15,7 +14,6 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import Loader from './components/common/Loader';
 import useSocket from './hooks/useSocket';
 
-// Lazy load all pages
 const Home              = lazy(() => import('./pages/Home'));
 const Login             = lazy(() => import('./pages/Login'));
 const Register          = lazy(() => import('./pages/Register'));
@@ -34,7 +32,7 @@ const AdminPanel        = lazy(() => import('./pages/AdminPanel'));
 const NotFound          = lazy(() => import('./pages/NotFound'));
 
 const PageLoader = () => (
-  <div style={{ minHeight: '50vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <Loader fullPage />
   </div>
 );
@@ -42,6 +40,7 @@ const PageLoader = () => (
 const SocketWrapper = ({ children }) => {
   const { isLoggedIn } = useAuth();
   const token = localStorage.getItem('kamnaka_token');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useSocket(isLoggedIn ? token : null, {});
   return children;
 };
@@ -54,7 +53,7 @@ const WorkerRoute = ({ children }) => (
 );
 
 const AppContent = () => {
-  const { isLoggedIn, isWorker, isEmployer } = useAuth();
+  const { isLoggedIn, isWorker } = useAuth();
 
   return (
     <>
@@ -62,7 +61,6 @@ const AppContent = () => {
       <main>
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* Public */}
             <Route path="/"            element={<Home />} />
             <Route path="/login"       element={<Login />} />
             <Route path="/register"    element={<Register />} />
@@ -70,42 +68,24 @@ const AppContent = () => {
             <Route path="/workers/:id" element={<WorkerProfilePage />} />
             <Route path="/jobs"        element={<SearchWorkers />} />
 
-            {/* Worker */}
-            <Route path="/worker/dashboard" element={
-              <WorkerRoute><WorkerDashboard /></WorkerRoute>
-            } />
+            <Route path="/worker/dashboard" element={<WorkerRoute><WorkerDashboard /></WorkerRoute>} />
+            <Route path="/employer/dashboard" element={<EmployerRoute><EmployerDashboard /></EmployerRoute>} />
+            <Route path="/jobs/post" element={<EmployerRoute><PostJob /></EmployerRoute>} />
 
-            {/* Employer */}
-            <Route path="/employer/dashboard" element={
-              <EmployerRoute><EmployerDashboard /></EmployerRoute>
-            } />
-            <Route path="/jobs/post" element={
-              <EmployerRoute><PostJob /></EmployerRoute>
-            } />
-
-            {/* Shared Protected */}
-            <Route path="/bookings"          element={<ProtectedRoute><BookingsListPage /></ProtectedRoute>} />
-            <Route path="/bookings/:id"      element={<ProtectedRoute><BookingPage /></ProtectedRoute>} />
-            <Route path="/book/:workerId"    element={<EmployerRoute><BookingPage /></EmployerRoute>} />
+            <Route path="/bookings"           element={<ProtectedRoute><BookingsListPage /></ProtectedRoute>} />
+            <Route path="/bookings/:id"       element={<ProtectedRoute><BookingPage /></ProtectedRoute>} />
+            <Route path="/book/:workerId"     element={<EmployerRoute><BookingPage /></EmployerRoute>} />
             <Route path="/payment/:bookingId" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
-            <Route path="/rate/:bookingId"   element={<ProtectedRoute><RatingPage /></ProtectedRoute>} />
-            <Route path="/notifications"     element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
-            <Route path="/settings"          element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/rate/:bookingId"    element={<ProtectedRoute><RatingPage /></ProtectedRoute>} />
+            <Route path="/notifications"      element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+            <Route path="/settings"           element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/admin/*"            element={<ProtectedRoute roles={['admin']}><AdminPanel /></ProtectedRoute>} />
 
-            {/* Admin */}
-            <Route path="/admin/*" element={
-              <ProtectedRoute roles={['admin']}><AdminPanel /></ProtectedRoute>
-            } />
-
-            {/* Smart redirect */}
             <Route path="/dashboard" element={
-              !isLoggedIn
-                ? <Navigate to="/login" replace />
-                : isWorker
-                  ? <Navigate to="/worker/dashboard" replace />
-                  : <Navigate to="/employer/dashboard" replace />
+              !isLoggedIn ? <Navigate to="/login" replace />
+                : isWorker ? <Navigate to="/worker/dashboard" replace />
+                : <Navigate to="/employer/dashboard" replace />
             } />
-
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

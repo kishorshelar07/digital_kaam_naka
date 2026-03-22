@@ -10,7 +10,7 @@ import api from '../services/api';
 import Loader from '../components/common/Loader';
 
 const AdminPanel = () => {
-  const { t } = useTranslation();
+  useTranslation();
   const [stats, setStats]     = useState(null);
   const [users, setUsers]     = useState([]);
   const [loading, setLoading] = useState(true);

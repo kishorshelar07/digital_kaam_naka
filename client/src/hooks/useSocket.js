@@ -10,7 +10,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:10000';
 
 /**
  * @desc    Custom hook for Socket.IO connection
@@ -74,7 +74,8 @@ const useSocket = (token, handlers = {}) => {
     if (handlers.onWorkerLocation) {
       socket.on('worker_location', handlers.onWorkerLocation);
     }
-  }, [token]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]); // handlers intentionally excluded
 
   useEffect(() => {
     connect();

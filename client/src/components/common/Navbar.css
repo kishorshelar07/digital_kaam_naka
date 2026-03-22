@@ -1,9 +1,8 @@
 /* ================================================================
-   components/common/Navbar.css
-   Author: Digital Kaam Naka Dev Team
+   Navbar.css — FIXED: Mobile lang switcher + hamburger menu
    ================================================================ */
 
-/* ── Desktop Navbar ───────────────────────────────────────────── */
+/* ── Desktop Navbar ─────────────────────────────────────────── */
 .navbar-desktop {
   position: sticky;
   top: 0;
@@ -21,10 +20,10 @@
   margin: 0 auto;
   padding: 0 var(--space-5);
   height: 64px;
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
-/* Brand / Logo */
+/* Brand */
 .navbar-brand {
   display: flex;
   align-items: center;
@@ -52,6 +51,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  flex: 1;
 }
 .nav-link {
   padding: 8px var(--space-4);
@@ -66,26 +66,32 @@
 .nav-link.active { background: var(--color-primary-light); color: var(--color-primary); }
 
 /* Right Section */
-.navbar-right { display: flex; align-items: center; gap: var(--space-4); flex-shrink: 0; }
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
 
 /* Language Switcher */
 .lang-switcher { display: flex; gap: 4px; }
 .lang-btn {
-  padding: 4px 10px;
+  padding: 4px 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   background: transparent;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text-muted);
   cursor: pointer;
   transition: all var(--transition);
   font-family: var(--font-family);
+  min-width: 28px;
 }
 .lang-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .lang-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
 
-/* Auth Section */
+/* Auth */
 .auth-section { display: flex; align-items: center; gap: var(--space-3); }
 .auth-buttons { display: flex; gap: var(--space-2); }
 
@@ -120,46 +126,92 @@
 .dropdown-header {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
 }
 .dropdown-role { font-size: 11px; color: var(--color-text-muted); text-transform: uppercase; margin-top: 2px; }
 .dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  display: flex; align-items: center; gap: var(--space-3);
   padding: 10px var(--space-4);
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: background var(--transition);
-  border: none;
-  background: none;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
+  color: var(--color-text); font-size: 14px; font-weight: 500;
+  text-decoration: none; transition: background var(--transition);
+  border: none; background: none; width: 100%; text-align: left; cursor: pointer;
 }
 .dropdown-item:hover { background: var(--color-bg); text-decoration: none; color: var(--color-text); }
 .dropdown-item.text-danger { color: var(--color-danger); }
 .dropdown-item.text-danger:hover { background: var(--color-danger-light); }
 .dropdown-divider { border: none; border-top: 1px solid var(--color-border); margin: 4px 0; }
 .badge-count {
-  background: var(--color-danger);
-  color: white;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: var(--radius-full);
-  margin-left: auto;
+  background: var(--color-danger); color: white;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-radius: var(--radius-full); margin-left: auto;
 }
 
-.nav-overlay {
-  position: fixed; inset: 0;
-  z-index: calc(var(--z-dropdown) - 1);
+/* ── Hamburger ──────────────────────────────────────────────── */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 20px;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--color-text);
+  transition: all var(--transition);
+  line-height: 1.4;
+}
+.hamburger-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+/* Mobile Right Group */
+.mobile-right {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-/* ── Mobile Bottom Nav ────────────────────────────────────────── */
+/* Desktop show / Mobile hide */
+.lang-desktop { display: flex; }
+.lang-mobile  { display: none; }
+.desktop-only { display: flex; }
+
+/* ── Mobile Dropdown Menu ───────────────────────────────────── */
+.mobile-dropdown {
+  display: none;
+  flex-direction: column;
+  background: var(--color-white);
+  border-top: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-2) 0;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+.mobile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 14px var(--space-5);
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.mobile-menu-item:hover,
+.mobile-menu-item.active { background: var(--color-primary-light); color: var(--color-primary); text-decoration: none; }
+.mobile-menu-item.text-danger { color: var(--color-danger); }
+.mobile-menu-divider { border: none; border-top: 1px solid var(--color-border); margin: 6px 0; }
+.mobile-user-info {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 12px var(--space-5);
+  background: var(--color-bg);
+}
+.mobile-user-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+
+/* ── Mobile Bottom Nav ──────────────────────────────────────── */
 .navbar-mobile {
   display: none;
   position: fixed;
@@ -171,72 +223,73 @@
   z-index: var(--z-fixed);
   padding: 0;
 }
-
 .mobile-tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 8px 4px;
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px; padding: 8px 4px;
   color: var(--color-text-muted);
-  text-decoration: none;
-  font-size: 10px;
-  font-weight: 600;
-  position: relative;
-  transition: color var(--transition);
-  border: none;
-  background: none;
+  text-decoration: none; font-size: 10px; font-weight: 600;
+  position: relative; transition: color var(--transition);
+  border: none; background: none;
 }
 .mobile-tab.active { color: var(--color-primary); }
 .tab-icon { font-size: 22px; line-height: 1; }
 .tab-label { font-size: 10px; font-weight: 600; }
 
-/* Center "Post Job / Available" tab — prominent */
-.post-tab {
-  position: relative;
-  margin-top: -16px;
-}
+.post-tab { position: relative; margin-top: -16px; }
 .post-icon {
   width: 48px; height: 48px;
-  background: var(--color-primary);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: 700;
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
+  background: var(--color-primary); color: white;
+  border-radius: 50%; display: flex;
+  align-items: center; justify-content: center;
+  font-size: 24px; font-weight: 700;
+  box-shadow: 0 4px 12px rgba(249,115,22,0.4);
   border: 3px solid white;
 }
 .post-tab.active .post-icon { background: var(--color-primary-dark); }
 
 .tab-badge {
-  position: absolute;
-  top: 4px;
+  position: absolute; top: 4px;
   right: calc(50% - 18px);
-  background: var(--color-danger);
-  color: white;
-  font-size: 9px;
-  font-weight: 700;
-  width: 16px; height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: var(--color-danger); color: white;
+  font-size: 9px; font-weight: 700;
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
   border: 2px solid white;
 }
 .tab-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
 
-/* ── Responsive: show/hide ────────────────────────────────────── */
-@media (max-width: 767px) {
-  .navbar-desktop .navbar-links { display: none; }
-  .navbar-desktop .lang-switcher { display: none; }
-  .navbar-desktop .navbar-container { height: 56px; }
-  .navbar-mobile { display: flex; }
+.nav-overlay {
+  position: fixed; inset: 0;
+  z-index: calc(var(--z-dropdown) - 1);
+  background: transparent;
 }
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .navbar-container {
+    height: 56px;
+    padding: 0 var(--space-4);
+  }
+
+  /* Hide desktop elements */
+  .navbar-links  { display: none; }
+  .lang-desktop  { display: none; }
+  .desktop-only  { display: none !important; }
+
+  /* Show mobile elements */
+  .mobile-right      { display: flex; }
+  .lang-mobile       { display: flex; }
+  .hamburger-btn     { display: block; }
+  .mobile-dropdown   { display: flex; }
+  .navbar-mobile     { display: flex; }
+
+  /* Fix gap — full width */
+  .navbar-brand { flex: 1; }
+}
+
 @media (max-width: 480px) {
-  .navbar-brand .brand-tagline { display: none; }
+  .navbar-container { padding: 0 var(--space-3); }
+  .brand-tagline { display: none; }
+  .brand-name { font-size: 14px; }
 }

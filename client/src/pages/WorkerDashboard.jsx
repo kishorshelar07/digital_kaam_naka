@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 import { workerService, bookingService } from '../services/authService';
 import BookingStatusBadge from '../components/booking/BookingStatus';
-import Loader, { CardSkeleton } from '../components/common/Loader';
+import { CardSkeleton } from '../components/common/Loader';
 
 const WorkerDashboard = () => {
   const { t } = useTranslation();

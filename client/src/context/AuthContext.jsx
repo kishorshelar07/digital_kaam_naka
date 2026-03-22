@@ -38,9 +38,8 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Load user only once on mount
-  useEffect(() => {
-    loadUser();
-  }, []); // Empty deps — only on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadUser(); }, []); // intentionally once on mount
 
   const updateUser = (updatedUser) => setUser(prev => ({ ...prev, ...updatedUser }));
 

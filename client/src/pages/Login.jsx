@@ -27,7 +27,7 @@ const Login = () => {
   const [step, setStep]             = useState(STEPS.PHONE);
   const [phone, setPhone]           = useState('');
   const [otp, setOtp]               = useState(['', '', '', '', '', '']);
-  const [role, setRole]             = useState('');
+  const [role, setRole]             = useState(''); // used in handleRoleSelect
   const [loading, setLoading]       = useState(false);
   const [countdown, setCountdown]   = useState(0);
 

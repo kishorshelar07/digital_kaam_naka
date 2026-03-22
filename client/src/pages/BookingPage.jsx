@@ -8,9 +8,9 @@ import Loader from '../components/common/Loader';
 
 const BookingPage = () => {
   const { workerId, id: bookingId } = useParams();
-  const { isEmployer } = useAuth();
+  
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
 
   const [worker, setWorker]         = useState(null);
   const [booking, setBooking]       = useState(null);
@@ -210,7 +210,7 @@ const BookingPage = () => {
   if (bookingId && booking) {
     // CHANGED: booking.worker?.user → booking.workerId?.userId
     const workerUserData   = booking.workerId?.userId || {};
-    const employerUserData = booking.employerId?.userId || {};
+    // const employerUserData = booking.employerId?.userId || {};
 
     const statusConfig = {
       pending:   { label: 'प्रलंबित',   color: '#f59e0b', bg: '#fffbeb', icon: '⏳' },

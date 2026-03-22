@@ -18,6 +18,7 @@ const SKILL_LEVELS = [
   { value: 'experienced', label: 'अनुभवी', emoji: '⚡' },
   { value: 'expert', label: 'तज्ञ', emoji: '🏆' },
 ];
+// eslint-disable-next-line no-unused-vars
 const EMPLOYER_TYPES = [
   { value: 'individual', label: 'व्यक्ती', emoji: '👤' },
   { value: 'contractor', label: 'कंत्राटदार', emoji: '🏗️' },
@@ -38,7 +39,7 @@ const Register = () => {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [profilePhoto, setProfilePhoto] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null); // used in img preview
   const [errors, setErrors]         = useState({});
 
   const [form, setForm] = useState({
@@ -70,6 +71,7 @@ const Register = () => {
     );
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handlePhoto = (e) => {
     const file = e.target.files[0];
     if (!file) return;
