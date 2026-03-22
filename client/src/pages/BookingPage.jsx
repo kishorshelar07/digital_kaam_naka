@@ -12,11 +12,11 @@ const BookingPage = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
 
-  const [worker, setWorker]       = useState(null);
-  const [booking, setBooking]     = useState(null);
-  const [loading, setLoading]     = useState(true);
+  const [worker, setWorker]         = useState(null);
+  const [booking, setBooking]       = useState(null);
+  const [loading, setLoading]       = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [confirmed, setConfirmed] = useState(false); // Step 2 — confirm before submit
+  const [confirmed, setConfirmed]   = useState(false);
 
   const [form, setForm] = useState({
     startDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
@@ -45,7 +45,10 @@ const BookingPage = () => {
   }, [workerId, bookingId]);
 
   const totalAmount = parseFloat(form.agreedRate || 0) * parseInt(form.totalDays || 1);
-  const workerName = worker?.user?.name || 'Worker';
+
+  // CHANGED: worker.user → worker.userId (MongoDB populated field)
+  const workerUser = worker?.userId || {};
+  const workerName = workerUser?.name || 'Worker';
   const lang = i18n.language;
   const getSkillName = (skill) => ({ mr: skill?.category?.nameMr, hi: skill?.category?.nameHi, en: skill?.category?.nameEn }[lang] || skill?.category?.nameEn);
 
@@ -53,7 +56,8 @@ const BookingPage = () => {
     setSubmitting(true);
     try {
       const { data } = await bookingService.create({
-        workerId: parseInt(workerId),
+        // CHANGED: parseInt(workerId) → workerId (ObjectId string, no parseInt needed)
+        workerId: workerId,
         startDate: form.startDate,
         totalDays: parseInt(form.totalDays),
         agreedRate: parseFloat(form.agreedRate),
@@ -70,14 +74,11 @@ const BookingPage = () => {
 
   if (loading) return <div className="container section-sm"><Loader fullPage /></div>;
 
-  // CREATE BOOKING — Step 1: Form
   if (workerId && worker && !confirmed) {
-    const workerUser = worker.user || {};
     return (
       <div style={{ maxWidth: 500, margin: '0 auto', padding: '24px 16px' }}>
-
-        {/* Worker Summary Card */}
         <div className="card card-body" style={{ marginBottom: 20, display: 'flex', gap: 16, alignItems: 'center', background: 'linear-gradient(135deg, #fff7ed, #ffedd5)' }}>
+          {/* CHANGED: workerUser.profilePhoto (was worker.user.profilePhoto) */}
           <img
             src={workerUser.profilePhoto || `https://ui-avatars.com/api/?name=${workerUser.name}&background=F97316&color=fff&size=64`}
             alt="" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
@@ -85,8 +86,9 @@ const BookingPage = () => {
             <div style={{ fontWeight: 800, fontSize: 18 }}>{workerUser.name}</div>
             <div style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>📍 {worker.city}, {worker.district}</div>
             <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {/* CHANGED: s.id → s._id */}
               {worker.skills?.slice(0, 2).map(s => (
-                <span key={s.id} className="badge badge-primary" style={{ fontSize: 11 }}>
+                <span key={s._id} className="badge badge-primary" style={{ fontSize: 11 }}>
                   {s.category?.iconEmoji} {getSkillName(s)}
                 </span>
               ))}
@@ -104,10 +106,7 @@ const BookingPage = () => {
         </div>
 
         <h1 style={{ fontSize: 18, marginBottom: 20 }}>📅 Booking details</h1>
-
         <div className="card card-body">
-
-          {/* Date + Days */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">काम सुरू तारीख *</label>
@@ -130,7 +129,6 @@ const BookingPage = () => {
             </div>
           </div>
 
-          {/* Rate */}
           <div className="form-group">
             <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>रोजंदारी (₹/दिवस) *</span>
@@ -145,30 +143,19 @@ const BookingPage = () => {
                 onChange={e => setForm(p => ({ ...p, agreedRate: e.target.value }))}
                 style={{ paddingLeft: 28 }} />
             </div>
-            {parseFloat(form.agreedRate) < parseFloat(worker.dailyRate) && (
-              <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
-                ⚠️ Worker चा सामान्य दर ₹{parseInt(worker.dailyRate).toLocaleString()} आहे
-              </div>
-            )}
           </div>
 
-          {/* Note */}
           <div className="form-group">
             <label className="form-label">काम कोणते? (ऐच्छिक)</label>
             <textarea className="form-control"
-              placeholder="उदा: घर रंगकाम, मजूर काम, शेत नांगरणी..."
+              placeholder="उदा: घर रंगकाम, मजूर काम..."
               value={form.bookingNote}
               onChange={e => setForm(p => ({ ...p, bookingNote: e.target.value }))}
               rows={2} maxLength={200} />
           </div>
 
-          {/* Amount Summary */}
           <div style={{ background: 'var(--color-bg)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-              <span>₹{form.agreedRate || 0} × {form.totalDays} दिवस</span>
-              <span>₹{totalAmount.toLocaleString()}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 18, borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 18 }}>
               <span>एकूण रक्कम</span>
               <span style={{ color: 'var(--color-primary)' }}>₹{totalAmount.toLocaleString()}</span>
             </div>
@@ -184,27 +171,19 @@ const BookingPage = () => {
     );
   }
 
-  // CREATE BOOKING — Step 2: Confirm screen
   if (workerId && worker && confirmed) {
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px' }}>
-        <h1 style={{ fontSize: 18, marginBottom: 4 }}>✅ Booking Confirm करा</h1>
-        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 20 }}>
-          खाली सर्व माहिती तपासा आणि confirm करा
-        </p>
-
+        <h1 style={{ fontSize: 18, marginBottom: 20 }}>✅ Booking Confirm करा</h1>
         <div className="card card-body" style={{ marginBottom: 20 }}>
-          {/* Worker */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', paddingBottom: 14, borderBottom: '1px solid var(--color-border)', marginBottom: 14 }}>
-            <img src={worker.user?.profilePhoto || `https://ui-avatars.com/api/?name=${workerName}&background=F97316&color=fff&size=48`}
+            <img src={workerUser.profilePhoto || `https://ui-avatars.com/api/?name=${workerName}&background=F97316&color=fff&size=48`}
               alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
             <div>
               <div style={{ fontWeight: 700 }}>{workerName}</div>
               <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>📍 {worker.city}, {worker.district}</div>
             </div>
           </div>
-
-          {/* Details */}
           {[
             ['📅 तारीख', form.startDate],
             ['⏱️ कालावधी', `${form.totalDays} दिवस`],
@@ -218,16 +197,8 @@ const BookingPage = () => {
             </div>
           ))}
         </div>
-
-        <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 13 }}>
-          💡 <strong>लक्षात ठेवा:</strong> Booking request पाठवल्यावर worker accept किंवा reject करेल.
-          Payment काम पूर्ण झाल्यावर होते.
-        </div>
-
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-light" style={{ flex: 1 }} onClick={() => setConfirmed(false)}>
-            ← बदला
-          </button>
+          <button className="btn btn-light" style={{ flex: 1 }} onClick={() => setConfirmed(false)}>← बदला</button>
           <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleBook} disabled={submitting}>
             {submitting ? <Loader text="पाठवत आहे..." /> : '📤 Booking Request पाठवा'}
           </button>
@@ -236,10 +207,10 @@ const BookingPage = () => {
     );
   }
 
-  // VIEW BOOKING DETAIL
   if (bookingId && booking) {
-    const workerUser   = booking.worker?.user || {};
-    const employerUser = booking.employer?.user || {};
+    // CHANGED: booking.worker?.user → booking.workerId?.userId
+    const workerUserData   = booking.workerId?.userId || {};
+    const employerUserData = booking.employerId?.userId || {};
 
     const statusConfig = {
       pending:   { label: 'प्रलंबित',   color: '#f59e0b', bg: '#fffbeb', icon: '⏳' },
@@ -254,8 +225,9 @@ const BookingPage = () => {
     return (
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '24px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--color-text-muted)' }}>←</button>
-          <h1 style={{ fontSize: 18, margin: 0 }}>Booking #{booking.id}</h1>
+          <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20 }}>←</button>
+          {/* CHANGED: booking.id → booking._id */}
+          <h1 style={{ fontSize: 18, margin: 0 }}>Booking #{String(booking._id).slice(-6)}</h1>
           <span style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 20, fontSize: 13, fontWeight: 700, color: st.color, background: st.bg }}>
             {st.icon} {st.label}
           </span>
@@ -264,21 +236,21 @@ const BookingPage = () => {
         <div className="card card-body" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 14, color: 'var(--color-text-muted)', marginBottom: 12 }}>👷 कामगार</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <img src={workerUser.profilePhoto || `https://ui-avatars.com/api/?name=${workerUser.name}&background=F97316&color=fff&size=48`}
+            <img src={workerUserData.profilePhoto || `https://ui-avatars.com/api/?name=${workerUserData.name}&background=F97316&color=fff&size=48`}
               alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
             <div>
-              <div style={{ fontWeight: 700 }}>{workerUser.name}</div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>📞 {workerUser.phone}</div>
+              <div style={{ fontWeight: 700 }}>{workerUserData.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>📞 {workerUserData.phone}</div>
             </div>
           </div>
         </div>
 
         <div className="card card-body" style={{ marginBottom: 16 }}>
           {[
-            ['📅 तारीख',      booking.startDate],
-            ['📆 कालावधी',   `${booking.totalDays} दिवस`],
-            ['💰 रोजंदारी',  `₹${parseInt(booking.agreedRate).toLocaleString()}`],
-            ['💵 एकूण',       `₹${parseInt(booking.totalAmount).toLocaleString()}`],
+            ['📅 तारीख',    booking.startDate],
+            ['📆 कालावधी', `${booking.totalDays} दिवस`],
+            ['💰 रोजंदारी', `₹${parseInt(booking.agreedRate).toLocaleString()}`],
+            ['💵 एकूण',     `₹${parseInt(booking.totalAmount).toLocaleString()}`],
             booking.bookingNote && ['📝 नोट', booking.bookingNote],
           ].filter(Boolean).map(([label, value]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
@@ -288,13 +260,15 @@ const BookingPage = () => {
           ))}
         </div>
 
+        {/* CHANGED: booking.id → booking._id */}
         {booking.status === 'completed' && !booking.ratingGivenToWorker && (
-          <button className="btn btn-primary btn-block" onClick={() => navigate(`/rate/${booking.id}`)}>
+          <button className="btn btn-primary btn-block" onClick={() => navigate(`/rate/${booking._id}`)}>
             ⭐ Rating द्या
           </button>
         )}
-        {booking.status === 'completed' && (!booking.payment || booking.payment?.status !== 'completed') && (
-          <button className="btn btn-success btn-block" style={{ marginTop: 8 }} onClick={() => navigate(`/payment/${booking.id}`)}>
+        {/* CHANGED: booking.payment → booking.paymentId */}
+        {booking.status === 'completed' && (!booking.paymentId || booking.paymentId?.status !== 'completed') && (
+          <button className="btn btn-success btn-block" style={{ marginTop: 8 }} onClick={() => navigate(`/payment/${booking._id}`)}>
             💰 Payment करा
           </button>
         )}

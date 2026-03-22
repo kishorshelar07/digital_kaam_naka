@@ -36,14 +36,14 @@ const WorkerProfilePage = () => {
   if (loading) return <div className="container section-sm"><Loader fullPage /></div>;
   if (!worker)  return <div className="container section-sm"><p>Worker सापडला नाही</p></div>;
 
-  const workerUser = worker.user || {};
-  const getCatName = (cat) => ({ mr: cat.nameMr, hi: cat.nameHi, en: cat.nameEn }[lang] || cat.nameEn);
+  // CHANGED: worker.user → worker.userId (MongoDB populated field)
+  const workerUser = worker.userId || {};
+  const getCatName = (cat) => ({ mr: cat?.nameMr, hi: cat?.nameHi, en: cat?.nameEn }[lang] || cat?.nameEn || '');
   const levelLabel = { beginner: 'नवीन', experienced: 'अनुभवी', expert: 'तज्ञ' };
   const levelColor = { beginner: 'badge-secondary', experienced: 'badge-primary', expert: 'badge-warning' };
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto', padding: '24px 16px' }}>
-      {/* Header */}
       <div className="card" style={{ marginBottom: 16, overflow: 'visible' }}>
         <div style={{ height: 120, background: 'linear-gradient(135deg, #1E3A5F, #2d5282)', borderRadius: '16px 16px 0 0' }} />
         <div className="card-body" style={{ paddingTop: 0 }}>
@@ -82,13 +82,13 @@ const WorkerProfilePage = () => {
         </div>
       </div>
 
-      {/* Skills */}
       {worker.skills?.length > 0 && (
         <div className="card card-body" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 16, marginBottom: 12 }}>💼 कौशल्ये</h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {/* CHANGED: skill.id → skill._id */}
             {worker.skills.map(skill => (
-              <span key={skill.id} className={`badge ${levelColor[skill.level] || 'badge-secondary'}`}
+              <span key={skill._id} className={`badge ${levelColor[skill.level] || 'badge-secondary'}`}
                 style={{ fontSize: 13, padding: '6px 14px' }}>
                 {skill.category?.iconEmoji || ''} {getCatName(skill.category || {})} — {levelLabel[skill.level] || ''}
               </span>
@@ -97,7 +97,6 @@ const WorkerProfilePage = () => {
         </div>
       )}
 
-      {/* Bio */}
       {worker.bio && (
         <div className="card card-body" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 16, marginBottom: 8 }}>👤 माझ्याबद्दल</h3>
@@ -105,20 +104,20 @@ const WorkerProfilePage = () => {
         </div>
       )}
 
-      {/* Reviews */}
       {reviews.length > 0 && (
         <div className="card card-body" style={{ marginBottom: 80 }}>
           <h3 style={{ fontSize: 16, marginBottom: 16 }}>⭐ अभिप्राय</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* CHANGED: r.id → r._id */}
             {reviews.map(r => (
-              <div key={r.id} style={{ paddingBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
+              <div key={r._id} style={{ paddingBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                   <img
-                    src={r.rater?.profilePhoto || `https://ui-avatars.com/api/?name=${r.rater?.name || 'U'}&background=1E3A5F&color=fff&size=36`}
+                    src={r.ratedBy?.profilePhoto || `https://ui-avatars.com/api/?name=${r.ratedBy?.name || 'U'}&background=1E3A5F&color=fff&size=36`}
                     alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
                   />
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{r.rater?.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{r.ratedBy?.name}</div>
                     <div style={{ color: '#F59E0B', fontSize: 14 }}>
                       {'★'.repeat(r.score)}{'☆'.repeat(5 - r.score)}
                     </div>
@@ -131,14 +130,11 @@ const WorkerProfilePage = () => {
         </div>
       )}
 
-      {/* Sticky Book Button */}
+      {/* CHANGED: worker.id → worker._id */}
       {isEmployer && worker.isAvailable && (
         <div className="sticky-bottom-btn">
-          <button
-            className="btn btn-primary btn-block btn-lg"
-            style={{ boxShadow: 'var(--shadow-lg)' }}
-            onClick={() => navigate(`/book/${worker.id}`)}
-          >
+          <button className="btn btn-primary btn-block btn-lg" style={{ boxShadow: 'var(--shadow-lg)' }}
+            onClick={() => navigate(`/book/${worker._id}`)}>
             📅 {t('worker.profile.bookNow')}
           </button>
         </div>

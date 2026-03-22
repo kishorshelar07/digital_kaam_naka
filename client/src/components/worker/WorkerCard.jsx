@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const user = worker?.user || {};
+  // CHANGED: worker.user → worker.userId (MongoDB populated field)
+  const user = worker?.userId || {};
 
   const getSkillName = (skill) => {
     if (!skill?.category) return '';
@@ -13,11 +14,7 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
     return map[lang] || skill.category.nameEn;
   };
 
-  const levelColor = {
-    beginner: 'badge-secondary',
-    experienced: 'badge-primary',
-    expert: 'badge-warning'
-  };
+  const levelColor = { beginner: 'badge-secondary', experienced: 'badge-primary', expert: 'badge-warning' };
 
   return (
     <div className="card worker-card fade-in">
@@ -33,8 +30,9 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {/* CHANGED: worker.id → worker._id */}
               <Link
-                to={`/workers/${worker.id}`}
+                to={`/workers/${worker._id}`}
                 style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-text)', textDecoration: 'none' }}
               >
                 {user.name || 'Worker'}
@@ -58,8 +56,9 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
 
         {worker.skills?.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {/* CHANGED: skill.id → skill._id */}
             {worker.skills.slice(0, 3).map(skill => (
-              <span key={skill.id} className={`badge ${levelColor[skill.level] || 'badge-secondary'}`}>
+              <span key={skill._id} className={`badge ${levelColor[skill.level] || 'badge-secondary'}`}>
                 {getSkillName(skill)}
               </span>
             ))}
@@ -97,19 +96,13 @@ const WorkerCard = ({ worker, onBook, showBookBtn = true }) => {
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <Link
-            to={`/workers/${worker.id}`}
-            className="btn btn-outline btn-sm"
-            style={{ flex: 1, textDecoration: 'none' }}
-          >
+          {/* CHANGED: worker.id → worker._id */}
+          <Link to={`/workers/${worker._id}`} className="btn btn-outline btn-sm" style={{ flex: 1, textDecoration: 'none' }}>
             प्रोफाइल पाहा
           </Link>
           {showBookBtn && worker.isAvailable && (
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ flex: 1 }}
-              onClick={() => onBook && onBook(worker)}
-            >
+            <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
+              onClick={() => onBook && onBook(worker)}>
               📅 बुक करा
             </button>
           )}

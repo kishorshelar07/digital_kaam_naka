@@ -1,87 +1,57 @@
 /**
  * ================================================================
- * models/Subscription.js — Employer Subscription Model (TABLE 12)
- * Razorpay subscription plans for employers to post jobs.
+ * models/Subscription.js — Employer Subscription Model (MongoDB / Mongoose)
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Subscription = sequelize.define('Subscription', {
-  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+const SubscriptionSchema = new mongoose.Schema(
+  {
+    employerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employer',
+      required: true,
+    },
 
-  employerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'employer_id',
-    references: { model: 'employers', key: 'id' },
-  },
+    plan: {
+      type: String,
+      enum: ['free', 'basic', 'pro', 'premium'],
+      required: true,
+      // free: 3 posts/month | basic: ₹299 = 15 posts | pro: ₹799 = unlimited | premium: ₹1999 = unlimited + priority
+    },
 
-  plan: {
-    type: DataTypes.ENUM('free', 'basic', 'pro', 'premium'),
-    allowNull: false,
-    // free: 3 posts/month | basic: ₹299 = 15 posts | pro: ₹799 = unlimited | premium: ₹1999 = unlimited + priority
-  },
+    price: { type: Number, required: true },
 
-  price: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-  },
-
-  postsAllowed: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'posts_allowed',
     // -1 = unlimited
-  },
+    postsAllowed: { type: Number, required: true },
+    postsUsed: { type: Number, default: 0 },
 
-  postsUsed: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'posts_used',
-  },
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
 
-  startDate: {
-    type: DataTypes.DATEONLY,
-    allowNull: false,
-    field: 'start_date',
-  },
+    razorpaySubId: { type: String, default: null },
 
-  endDate: {
-    type: DataTypes.DATEONLY,
-    allowNull: false,
-    field: 'end_date',
+    isActive: { type: Boolean, default: true },
   },
+  {
+    timestamps: true,
+    collection: 'subscriptions',
+  }
+);
 
-  razorpaySubId: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-    field: 'razorpay_sub_id',
-  },
-
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-    field: 'is_active',
-  },
-}, {
-  tableName: 'subscriptions',
-  timestamps: true,
-  underscored: true,
-});
+SubscriptionSchema.index({ employerId: 1, isActive: 1 });
 
 /**
- * @desc    Check if employer can still post jobs
- * @returns {boolean}
+ * Check if employer can still post jobs
  */
-Subscription.prototype.canPost = function () {
+SubscriptionSchema.methods.canPost = function () {
   const now = new Date();
-  const expired = new Date(this.endDate) < now;
-  if (!this.isActive || expired) return false;
-  if (this.postsAllowed === -1) return true; // unlimited
+  if (!this.isActive || new Date(this.endDate) < now) return false;
+  if (this.postsAllowed === -1) return true;
   return this.postsUsed < this.postsAllowed;
 };
 
-module.exports = Subscription;
+module.exports = mongoose.model('Subscription', SubscriptionSchema);

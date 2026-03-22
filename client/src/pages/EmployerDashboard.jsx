@@ -37,7 +37,6 @@ const EmployerDashboard = () => {
 
   return (
     <div className="container section-sm">
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22 }}>
@@ -50,7 +49,6 @@ const EmployerDashboard = () => {
         </Link>
       </div>
 
-      {/* Stats */}
       <div className="grid-4" style={{ marginBottom: 24, gap: 12 }}>
         {STATS.map((stat, i) => (
           <div key={i} className="card card-body" style={{ textAlign: 'center', padding: '16px 12px' }}>
@@ -62,7 +60,6 @@ const EmployerDashboard = () => {
       </div>
 
       <div className="grid-2" style={{ gap: 20 }}>
-        {/* Active Jobs */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ fontSize: 18 }}>📋 माझ्या जाहिराती</h2>
@@ -72,12 +69,11 @@ const EmployerDashboard = () => {
             <div className="card card-body" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '32px 16px' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
               <p>अजून कोणतीही जाहिरात नाही</p>
-              <Link to="/jobs/post" className="btn btn-primary" style={{ marginTop: 12, textDecoration: 'none' }}>
-                + काम टाका
-              </Link>
+              <Link to="/jobs/post" className="btn btn-primary" style={{ marginTop: 12, textDecoration: 'none' }}>+ काम टाका</Link>
             </div>
           ) : jobs.map(job => (
-            <div key={job.id} className="card card-body" style={{ marginBottom: 12 }}>
+            // CHANGED: job.id → job._id
+            <div key={job._id} className="card card-body" style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: 700 }}>{job.title}</div>
@@ -97,7 +93,6 @@ const EmployerDashboard = () => {
           ))}
         </div>
 
-        {/* Recent Bookings */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ fontSize: 18 }}>📊 अलीकडील बुकिंग</h2>
@@ -107,21 +102,20 @@ const EmployerDashboard = () => {
             <div className="card card-body" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '32px 16px' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
               <p>अजून कोणतीही बुकिंग नाही</p>
-              <Link to="/workers" className="btn btn-outline" style={{ marginTop: 12, textDecoration: 'none' }}>
-                कामगार शोधा
-              </Link>
             </div>
           ) : bookings.map(booking => (
-            <div key={booking.id} className="card card-body" style={{ marginBottom: 12 }}>
+            // CHANGED: booking.id → booking._id
+            // CHANGED: booking.worker?.user → booking.workerId?.userId
+            <div key={booking._id} className="card card-body" style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <img
-                  src={booking.worker?.user?.profilePhoto ||
-                    `https://ui-avatars.com/api/?name=${booking.worker?.user?.name || 'W'}&background=F97316&color=fff&size=40`}
+                  src={booking.workerId?.userId?.profilePhoto ||
+                    `https://ui-avatars.com/api/?name=${booking.workerId?.userId?.name || 'W'}&background=F97316&color=fff&size=40`}
                   alt=""
                   style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }}
                 />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{booking.worker?.user?.name}</div>
+                  <div style={{ fontWeight: 600 }}>{booking.workerId?.userId?.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
                     {booking.startDate} | ₹{parseInt(booking.totalAmount).toLocaleString()}
                   </div>
@@ -133,13 +127,9 @@ const EmployerDashboard = () => {
         </div>
       </div>
 
-      {/* CTA */}
       <div className="card card-body" style={{ marginTop: 24, background: 'var(--color-primary-light)', border: '2px solid var(--color-primary)', textAlign: 'center', padding: 28 }}>
         <div style={{ fontSize: 40, marginBottom: 8 }}>👷</div>
         <h3 style={{ marginBottom: 8 }}>जवळचे उपलब्ध कामगार शोधा</h3>
-        <p style={{ color: 'var(--color-text-muted)', marginBottom: 16, fontSize: 14 }}>
-          आत्ता उपलब्ध असलेले कामगार GPS द्वारे शोधा
-        </p>
         <Link to="/workers?availableToday=true" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block' }}>
           🗺️ जवळचे कामगार पाहा
         </Link>

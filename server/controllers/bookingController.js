@@ -1,15 +1,24 @@
 /**
  * ================================================================
  * controllers/bookingController.js — Booking Lifecycle Controller
- * Manages the complete booking flow:
- * Create → Accept/Reject → Start → Complete → Pay → Rate
- * Includes real-time Socket.IO notifications and WhatsApp alerts.
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
+ *
+ * KEY CHANGES:
+ *  - sequelize.transaction()        → mongoose.startSession() + session.startTransaction()
+ *  - transaction: t option          → session option in each query
+ *  - t.commit() / t.rollback()      → session.commitTransaction() / session.abortTransaction()
+ *  - Booking.findByPk()             → Booking.findById()
+ *  - booking.update({})             → Object.assign + booking.save()
+ *  - Worker.increment({totalJobs})  → Worker.findByIdAndUpdate({$inc})
+ *  - Employer.findOne({ where: {}}) → Employer.findOne({})
+ *  - include: [Worker, User]        → .populate()
+ *  - Op.in                          → $in
+ *  - Booking.findAndCountAll()      → Booking.find() + countDocuments()
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { sequelize } = require('../config/db');
-const { Op } = require('sequelize');
+const mongoose = require('mongoose');
 const { User, Worker, Employer, Booking, JobPost, Payment, Notification, Category } = require('../models');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/responseHelper');
 const { sendBookingConfirmationToWorker, sendAcceptanceToEmployer } = require('../utils/sendWhatsApp');
@@ -20,9 +29,8 @@ const {
 } = require('../config/socket');
 const logger = require('../utils/logger');
 
-/**
- * @desc    Helper: Create in-app notification record
- */
+// ── Helper: Create in-app notification ───────────────────────
+
 const createNotification = async (userId, type, titles, messages, referenceId, referenceType) => {
   try {
     await Notification.create({
@@ -37,99 +45,109 @@ const createNotification = async (userId, type, titles, messages, referenceId, r
   }
 };
 
+// ── Helper: populate a booking fully ─────────────────────────
+
+const populateBooking = (query) =>
+  query
+    .populate({ path: 'workerId', populate: { path: 'userId', select: 'name profilePhoto phone' } })
+    .populate({ path: 'employerId', populate: { path: 'userId', select: 'name profilePhoto phone' } })
+    .populate({ path: 'jobPostId', populate: { path: 'categoryId', model: 'Category' } })
+    .populate('paymentId');
+
 // ── CREATE BOOKING ────────────────────────────────────────────
 
-/**
- * @desc    Employer creates a booking request for a worker
- * @route   POST /api/bookings
- * @access  Protected (employer only)
- */
 const createBooking = async (req, res) => {
-  // Use transaction — booking + job slot update must both succeed or fail together
-  const t = await sequelize.transaction();
+  // CHANGED: sequelize.transaction() → mongoose.startSession()
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
     const { workerId, jobPostId, startDate, endDate, totalDays, agreedRate, bookingNote } = req.body;
 
-    // Get employer profile
-    const employer = await Employer.findOne({ where: { userId: req.user.id }, transaction: t });
+    // CHANGED: Employer.findOne({ where: { userId } }) → Employer.findOne({ userId })
+    const employer = await Employer.findOne({ userId: req.user._id }).session(session);
     if (!employer) return sendError(res, 'Employer profile not found', 404);
 
-    // Get worker + user details for notifications
-    const worker = await Worker.findByPk(workerId, {
-      include: [{ model: User, as: 'user', attributes: ['name', 'phone', 'language', 'fcmToken'] }],
-      transaction: t,
-    });
+    // CHANGED: Worker.findByPk(workerId, { include: [User] }) → Worker.findById().populate()
+    const worker = await Worker.findById(workerId)
+      .populate({ path: 'userId', select: 'name phone language fcmToken' })
+      .session(session);
     if (!worker) return sendError(res, 'Worker not found', 404);
-    // Note: isAvailable check removed — employer can book any worker
 
-    // Check for overlapping bookings (simple check - same date)
+    // CHANGED: Booking.findOne({ where: { workerId, status: { [Op.in]: [...] }, startDate } })
+    //       → Booking.findOne({ workerId, status: { $in: [...] }, startDate })
     const existingBooking = await Booking.findOne({
-      where: {
-        workerId: parseInt(workerId),
-        status: { [Op.in]: ['accepted', 'started'] },
-        startDate: startDate,
-      },
-      transaction: t,
-    });
+      workerId: worker._id,
+      status: { $in: ['accepted', 'started'] }, // CHANGED: Op.in → $in
+      startDate: new Date(startDate),
+    }).session(session);
 
     if (existingBooking) {
-      await t.rollback();
+      await session.abortTransaction();
+      session.endSession();
       return sendError(res, 'Worker is already booked on this date', 409);
     }
 
     const totalAmount = parseFloat(agreedRate) * parseInt(totalDays || 1);
 
-    // Create the booking
-    const booking = await Booking.create({
-      jobPostId: jobPostId ? parseInt(jobPostId) : null,
-      workerId: parseInt(workerId),
-      employerId: employer.id,
-      startDate,
-      endDate: endDate || startDate,
-      totalDays: parseInt(totalDays) || 1,
-      agreedRate: parseFloat(agreedRate),
-      totalAmount,
-      bookingNote: bookingNote || '',
-      status: 'pending',
-    }, { transaction: t });
+    // Booking.create() stays the same syntax in Mongoose, but pass session
+    const [booking] = await Booking.create(
+      [{
+        jobPostId: jobPostId || null,
+        workerId: worker._id,
+        employerId: employer._id,
+        startDate: new Date(startDate),
+        endDate: endDate ? new Date(endDate) : new Date(startDate),
+        totalDays: parseInt(totalDays) || 1,
+        agreedRate: parseFloat(agreedRate),
+        totalAmount,
+        bookingNote: bookingNote || '',
+        status: 'pending',
+      }],
+      { session }
+    );
 
     // If from a job post, increment workers booked
     if (jobPostId) {
-      const jobPost = await JobPost.findByPk(jobPostId, { transaction: t });
+      const jobPost = await JobPost.findById(jobPostId).session(session);
       if (jobPost) {
         const newBookedCount = (jobPost.workersBooked || 0) + 1;
         const newStatus = newBookedCount >= jobPost.workersNeeded ? 'filled' : 'partially_filled';
-        await jobPost.update(
+        // CHANGED: jobPost.update({}) → findByIdAndUpdate($inc + set)
+        await JobPost.findByIdAndUpdate(
+          jobPostId,
           { workersBooked: newBookedCount, status: newStatus },
-          { transaction: t }
+          { session }
         );
       }
     }
 
-    // Create payment record (pending)
+    // Create pending payment record
     const platformFee = parseFloat((totalAmount * 0.05).toFixed(2));
-    await Payment.create({
-      bookingId: booking.id,
-      employerId: employer.id,
-      workerId: parseInt(workerId),
-      amount: totalAmount,
-      platformFee,
-      workerAmount: totalAmount - platformFee,
-      status: 'pending',
-      method: 'cash', // default, updated during payment
-    }, { transaction: t });
+    await Payment.create(
+      [{
+        bookingId: booking._id,
+        employerId: employer._id,
+        workerId: worker._id,
+        amount: totalAmount,
+        platformFee,
+        workerAmount: totalAmount - platformFee,
+        status: 'pending',
+        method: 'cash',
+      }],
+      { session }
+    );
 
-    await t.commit();
+    // CHANGED: t.commit() → session.commitTransaction()
+    await session.commitTransaction();
+    session.endSession();
 
     // ── Post-transaction notifications ────────────────────────
+    // CHANGED: User.findByPk() → User.findById()
+    const employerUser = await User.findById(req.user._id).select('name phone language');
 
-    // Get employer user details for notification content
-    const employerUser = await User.findByPk(req.user.id, { attributes: ['name', 'phone', 'language'] });
-
-    // In-app notification to worker
     await createNotification(
-      worker.userId, 'booking_request',
+      worker.userId._id, 'booking_request',
       {
         mr: `${employerUser.name} यांनी booking request पाठवली`,
         hi: `${employerUser.name} ने booking request भेजी`,
@@ -140,75 +158,52 @@ const createBooking = async (req, res) => {
         hi: `काम: तारीख ${startDate} | दैनिक ₹${agreedRate}`,
         en: `Work date: ${startDate} | Rate: ₹${agreedRate}/day`,
       },
-      booking.id, 'booking'
+      booking._id, 'booking'
     );
 
-    // WhatsApp notification to worker
     sendBookingConfirmationToWorker(
-      worker.user.phone, worker.user.name, employerUser.name,
-      'New Job', startDate, agreedRate, worker.user.language || 'mr'
-    ).catch(() => {}); // Non-blocking
+      worker.userId.phone, worker.userId.name, employerUser.name,
+      'New Job', startDate, agreedRate, worker.userId.language || 'mr'
+    ).catch(() => {});
 
-    // Real-time Socket.IO notification
     if (req.app.get('io')) {
-      notifyNewBookingRequest(req.app.get('io'), worker.userId, {
-        bookingId: booking.id,
-        employerName: employerUser.name,
+      notifyNewBookingRequest(req.app.get('io'), worker.userId._id, {
+        bookingId: booking._id, employerName: employerUser.name,
         startDate, agreedRate, totalDays,
       });
     }
 
-    // FCM push notification
-    if (worker.user.fcmToken) {
+    if (worker.userId.fcmToken) {
       sendPushNotification(
-        worker.user.fcmToken,
+        worker.userId.fcmToken,
         '🎉 नवीन Booking Request!',
         `${employerUser.name} यांनी ₹${agreedRate}/दिवस साठी request केली`,
-        { bookingId: String(booking.id), screen: 'BookingDetail' }
+        { bookingId: String(booking._id), screen: 'BookingDetail' }
       ).catch(() => {});
     }
 
-    const fullBooking = await Booking.findByPk(booking.id, {
-      include: [
-        { model: Worker,   as: 'worker',   required: false,
-          include: [{ model: User, as: 'user', attributes: ['name','profilePhoto','phone'], required: false }] },
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', attributes: ['name','profilePhoto'], required: false }] },
-        { model: Payment,  as: 'payment',  required: false },
-      ],
-    });
-
+    // CHANGED: Booking.findByPk(id, { include: [...] }) → populateBooking(Booking.findById())
+    const fullBooking = await populateBooking(Booking.findById(booking._id));
     return sendSuccess(res, 'Booking request sent successfully!', fullBooking, 201);
   } catch (error) {
-    await t.rollback();
+    // CHANGED: t.rollback() → session.abortTransaction()
+    await session.abortTransaction();
+    session.endSession();
     logger.error('createBooking error:', error.message);
-    logger.error(error.stack);
     return sendError(res, 'Failed to create booking: ' + error.message, 500);
   }
 };
 
 // ── ACCEPT BOOKING ────────────────────────────────────────────
 
-/**
- * @desc    Worker accepts a pending booking request
- * @route   PUT /api/bookings/:id/accept
- * @access  Protected (worker only)
- */
 const acceptBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByPk(req.params.id, {
-      include: [
-        { model: Worker,   as: 'worker',   required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-      ],
-    });
-
+    // CHANGED: Booking.findByPk(id, { include: [...] }) → populateBooking(Booking.findById())
+    const booking = await populateBooking(Booking.findById(req.params.id));
     if (!booking) return sendError(res, 'Booking not found', 404);
 
-    // Only the booked worker can accept
-    if (booking.worker.userId !== req.user.id) {
+    // CHANGED: booking.worker.userId !== req.user.id → .toString() comparison
+    if (booking.workerId.userId._id.toString() !== req.user._id.toString()) {
       return sendError(res, 'Only the assigned worker can accept this booking', 403);
     }
 
@@ -216,15 +211,15 @@ const acceptBooking = async (req, res) => {
       return sendError(res, `Cannot accept booking with status: ${booking.status}`, 400);
     }
 
-    await booking.update({ status: 'accepted' });
+    // CHANGED: booking.update({ status }) → booking.status = ...; booking.save()
+    booking.status = 'accepted';
+    await booking.save();
 
-    // Notify employer via multiple channels
-    const workerUser = await User.findByPk(req.user.id, { attributes: ['name'] });
-    const employerUser = booking.employer.user;
-    const jobTitle = booking.jobPost?.title || 'Direct Booking';
+    const workerUser = await User.findById(req.user._id).select('name');
+    const employerUser = booking.employerId.userId;
 
     await createNotification(
-      employerUser.id, 'booking_accepted',
+      employerUser._id, 'booking_accepted',
       {
         mr: `${workerUser.name} यांनी booking accept केली! ✅`,
         hi: `${workerUser.name} ने booking accept की! ✅`,
@@ -235,17 +230,18 @@ const acceptBooking = async (req, res) => {
         hi: `तारीख: ${booking.startDate} | ₹${booking.agreedRate}/दिन`,
         en: `Date: ${booking.startDate} | ₹${booking.agreedRate}/day`,
       },
-      booking.id, 'booking'
+      booking._id, 'booking'
     );
 
     sendAcceptanceToEmployer(
       employerUser.phone, employerUser.name,
-      workerUser.name, jobTitle, booking.startDate, employerUser.language
+      workerUser.name, booking.jobPostId?.title || 'Direct Booking',
+      booking.startDate, employerUser.language
     ).catch(() => {});
 
     if (req.app.get('io')) {
-      notifyBookingAccepted(req.app.get('io'), employerUser.id, {
-        bookingId: booking.id, workerName: workerUser.name, startDate: booking.startDate,
+      notifyBookingAccepted(req.app.get('io'), employerUser._id, {
+        bookingId: booking._id, workerName: workerUser.name, startDate: booking.startDate,
       });
     }
 
@@ -258,50 +254,43 @@ const acceptBooking = async (req, res) => {
 
 // ── REJECT BOOKING ────────────────────────────────────────────
 
-/**
- * @desc    Worker rejects a booking request
- * @route   PUT /api/bookings/:id/reject
- * @access  Protected (worker only)
- */
 const rejectBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByPk(req.params.id, {
-      include: [
-        { model: Worker,   as: 'worker',   required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-      ],
-    });
-
+    const booking = await populateBooking(Booking.findById(req.params.id));
     if (!booking) return sendError(res, 'Booking not found', 404);
-    if (booking.worker.userId !== req.user.id) return sendError(res, 'Not authorized', 403);
-    if (booking.status !== 'pending') return sendError(res, `Cannot reject booking with status: ${booking.status}`, 400);
+    if (booking.workerId.userId._id.toString() !== req.user._id.toString())
+      return sendError(res, 'Not authorized', 403);
+    if (booking.status !== 'pending')
+      return sendError(res, `Cannot reject booking with status: ${booking.status}`, 400);
 
     const { reason } = req.body;
-    await booking.update({ status: 'rejected', cancelReason: reason || '', cancelledBy: req.user.id, cancelledAt: new Date() });
+    booking.status = 'rejected';
+    booking.cancelReason = reason || '';
+    booking.cancelledBy = req.user._id;
+    booking.cancelledAt = new Date();
+    await booking.save();
 
-    // If from job post, decrement workers_booked
     if (booking.jobPostId) {
-      const job = await JobPost.findByPk(booking.jobPostId);
+      const job = await JobPost.findById(booking.jobPostId._id);
       if (job && job.workersBooked > 0) {
-        await job.update({
-          workersBooked: job.workersBooked - 1,
+        // CHANGED: job.update({}) → Job.findByIdAndUpdate($inc)
+        await JobPost.findByIdAndUpdate(job._id, {
+          $inc: { workersBooked: -1 },
           status: 'open',
         });
       }
     }
 
-    const employerUser = booking.employer.user;
+    const employerUser = booking.employerId.userId;
     await createNotification(
-      employerUser.id, 'booking_rejected',
+      employerUser._id, 'booking_rejected',
       { mr: 'Booking नाकारली गेली', hi: 'Booking अस्वीकार की गई', en: 'Booking was rejected' },
       { mr: `कारण: ${reason || 'कारण नाही'}`, hi: `कारण: ${reason || 'कोई कारण नहीं'}`, en: `Reason: ${reason || 'No reason given'}` },
-      booking.id, 'booking'
+      booking._id, 'booking'
     );
 
     if (req.app.get('io')) {
-      notifyBookingRejected(req.app.get('io'), employerUser.id, { bookingId: booking.id, reason });
+      notifyBookingRejected(req.app.get('io'), employerUser._id, { bookingId: booking._id, reason });
     }
 
     return sendSuccess(res, 'Booking rejected', booking);
@@ -313,44 +302,32 @@ const rejectBooking = async (req, res) => {
 
 // ── MARK WORK STARTED ─────────────────────────────────────────
 
-/**
- * @desc    Worker marks that they have started the work
- * @route   PUT /api/bookings/:id/start
- * @access  Protected (worker only)
- */
 const startWork = async (req, res) => {
   try {
-    const booking = await Booking.findByPk(req.params.id, {
-      include: [
-        { model: Worker,   as: 'worker',   required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-      ],
-    });
-
+    const booking = await populateBooking(Booking.findById(req.params.id));
     if (!booking) return sendError(res, 'Booking not found', 404);
-    if (booking.worker.userId !== req.user.id) return sendError(res, 'Not authorized', 403);
-    if (booking.status !== 'accepted') return sendError(res, 'Booking must be accepted before starting', 400);
+    if (booking.workerId.userId._id.toString() !== req.user._id.toString())
+      return sendError(res, 'Not authorized', 403);
+    if (booking.status !== 'accepted')
+      return sendError(res, 'Booking must be accepted before starting', 400);
 
     const { latitude, longitude } = req.body;
-    await booking.update({
-      status: 'started',
-      workStartedAt: new Date(),
-      workSiteLatitude: latitude ? parseFloat(latitude) : null,
-      workSiteLongitude: longitude ? parseFloat(longitude) : null,
-    });
+    booking.status = 'started';
+    booking.workStartedAt = new Date();
+    booking.workSiteLatitude = latitude ? parseFloat(latitude) : null;
+    booking.workSiteLongitude = longitude ? parseFloat(longitude) : null;
+    await booking.save();
 
-    const employerUser = booking.employer.user;
+    const employerUser = booking.employerId.userId;
     await createNotification(
-      employerUser.id, 'booking_started',
+      employerUser._id, 'booking_started',
       { mr: 'कामगार काम सुरू केले! 🔨', hi: 'मजदूर ने काम शुरू किया! 🔨', en: 'Worker has started the work! 🔨' },
       { mr: `आजपासून काम सुरू`, hi: `आज से काम शुरू`, en: `Work started today` },
-      booking.id, 'booking'
+      booking._id, 'booking'
     );
 
     if (req.app.get('io')) {
-      notifyWorkStarted(req.app.get('io'), employerUser.id, { bookingId: booking.id });
+      notifyWorkStarted(req.app.get('io'), employerUser._id, { bookingId: booking._id });
     }
 
     return sendSuccess(res, 'Work started! Employer has been notified. 🔨', booking);
@@ -362,76 +339,75 @@ const startWork = async (req, res) => {
 
 // ── MARK WORK COMPLETED ───────────────────────────────────────
 
-/**
- * @desc    Mark work as completed — triggers payment + rating flow
- * @route   PUT /api/bookings/:id/complete
- * @access  Protected (employer or worker)
- */
 const completeWork = async (req, res) => {
-  const t = await sequelize.transaction();
+  // CHANGED: sequelize.transaction() → mongoose.startSession()
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const booking = await Booking.findByPk(req.params.id, {
-      include: [
-        { model: Worker,   as: 'worker',   required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', required: false }] },
-      ],
-      transaction: t,
-    });
+    const booking = await populateBooking(
+      Booking.findById(req.params.id).session(session)
+    );
 
-    if (!booking) { await t.rollback(); return sendError(res, 'Booking not found', 404); }
-    if (booking.status !== 'started') { await t.rollback(); return sendError(res, 'Work must be started before completing', 400); }
+    if (!booking) { await session.abortTransaction(); session.endSession(); return sendError(res, 'Booking not found', 404); }
+    if (booking.status !== 'started') { await session.abortTransaction(); session.endSession(); return sendError(res, 'Work must be started before completing', 400); }
 
-    // Either party can mark complete
-    const isWorker = booking.worker.userId === req.user.id;
-    const isEmployer = booking.employer.userId === req.user.id;
+    const workerUserId = booking.workerId.userId._id;
+    const employerUserId = booking.employerId.userId._id;
+
+    const isWorker = workerUserId.toString() === req.user._id.toString();
+    const isEmployer = employerUserId.toString() === req.user._id.toString();
     if (!isWorker && !isEmployer && req.user.role !== 'admin') {
-      await t.rollback();
+      await session.abortTransaction();
+      session.endSession();
       return sendError(res, 'Not authorized', 403);
     }
 
-    await booking.update({ status: 'completed', workEndedAt: new Date() }, { transaction: t });
+    booking.status = 'completed';
+    booking.workEndedAt = new Date();
+    await booking.save({ session });
 
-    // Update worker stats
-    await Worker.increment(
-      { totalJobs: 1, totalEarnings: booking.totalAmount * 0.95 },
-      { where: { id: booking.workerId }, transaction: t }
+    // CHANGED: Worker.increment({ totalJobs: 1 }) → Worker.findByIdAndUpdate($inc)
+    await Worker.findByIdAndUpdate(
+      booking.workerId._id,
+      { $inc: { totalJobs: 1, totalEarnings: booking.totalAmount * 0.95 } },
+      { session }
     );
 
-    // Update employer stats
-    await Employer.increment(
-      { totalHires: 1, totalSpent: booking.totalAmount },
-      { where: { id: booking.employerId }, transaction: t }
+    // CHANGED: Employer.increment({ totalHires: 1 }) → Employer.findByIdAndUpdate($inc)
+    await Employer.findByIdAndUpdate(
+      booking.employerId._id,
+      { $inc: { totalHires: 1, totalSpent: booking.totalAmount } },
+      { session }
     );
 
-    await t.commit();
+    // CHANGED: t.commit() → session.commitTransaction()
+    await session.commitTransaction();
+    session.endSession();
 
-    // Notify both parties
-    const workerUser = booking.worker.user;
-    const employerUser = booking.employer.user;
+    const workerUser = booking.workerId.userId;
+    const employerUser = booking.employerId.userId;
 
     await createNotification(
-      workerUser.id, 'booking_completed',
+      workerUser._id, 'booking_completed',
       { mr: 'काम पूर्ण झाले! 🎉', hi: 'काम पूरा हुआ! 🎉', en: 'Work completed! 🎉' },
       { mr: `₹${booking.totalAmount} payment pending आहे`, hi: `₹${booking.totalAmount} payment pending है`, en: `₹${booking.totalAmount} payment is pending` },
-      booking.id, 'booking'
+      booking._id, 'booking'
     );
-
     await createNotification(
-      employerUser.id, 'booking_completed',
+      employerUser._id, 'booking_completed',
       { mr: 'काम पूर्ण झाले! आता rating द्या', hi: 'काम पूरा हुआ! अब rating दें', en: 'Work complete! Please rate the worker.' },
       { mr: `₹${booking.totalAmount} payment करा`, hi: `₹${booking.totalAmount} payment करें`, en: `Please pay ₹${booking.totalAmount}` },
-      booking.id, 'booking'
+      booking._id, 'booking'
     );
 
     if (req.app.get('io')) {
-      notifyWorkCompleted(req.app.get('io'), workerUser.id, employerUser.id, { bookingId: booking.id });
+      notifyWorkCompleted(req.app.get('io'), workerUser._id, employerUser._id, { bookingId: booking._id });
     }
 
     return sendSuccess(res, 'Work marked as completed! 🎉 Please proceed to payment and rating.', booking);
   } catch (error) {
-    await t.rollback();
+    await session.abortTransaction();
+    session.endSession();
     logger.error('completeWork error:', error);
     return sendError(res, 'Failed to complete booking', 500);
   }
@@ -439,42 +415,36 @@ const completeWork = async (req, res) => {
 
 // ── CANCEL BOOKING ────────────────────────────────────────────
 
-/**
- * @desc    Cancel a pending or accepted booking
- * @route   PUT /api/bookings/:id/cancel
- * @access  Protected (either party)
- */
 const cancelBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByPk(req.params.id, {
-      include: [
-        { model: Worker,   as: 'worker',   required: false },
-        { model: Employer, as: 'employer', required: false },
-      ],
-    });
-
+    const booking = await populateBooking(Booking.findById(req.params.id));
     if (!booking) return sendError(res, 'Booking not found', 404);
-    if (!booking.canBeCancelled()) return sendError(res, `Cannot cancel booking with status: ${booking.status}`, 400);
+    if (!booking.canBeCancelled())
+      return sendError(res, `Cannot cancel booking with status: ${booking.status}`, 400);
 
-    const isWorker = booking.worker.userId === req.user.id;
-    const isEmployer = booking.employer.userId === req.user.id;
+    const workerUserId = booking.workerId?.userId?._id?.toString();
+    const employerUserId = booking.employerId?.userId?._id?.toString();
+    const isWorker = workerUserId === req.user._id.toString();
+    const isEmployer = employerUserId === req.user._id.toString();
     if (!isWorker && !isEmployer && req.user.role !== 'admin') {
       return sendError(res, 'Not authorized to cancel this booking', 403);
     }
 
+    const prevStatus = booking.status;
     const { reason } = req.body;
-    await booking.update({
-      status: 'cancelled',
-      cancelReason: reason || '',
-      cancelledBy: req.user.id,
-      cancelledAt: new Date(),
-    });
+    booking.status = 'cancelled';
+    booking.cancelReason = reason || '';
+    booking.cancelledBy = req.user._id;
+    booking.cancelledAt = new Date();
+    await booking.save();
 
-    // If from job post, decrement workers_booked
-    if (booking.jobPostId && ['accepted', 'pending'].includes(booking.status)) {
-      const job = await JobPost.findByPk(booking.jobPostId);
+    if (booking.jobPostId && ['accepted', 'pending'].includes(prevStatus)) {
+      const job = await JobPost.findById(booking.jobPostId._id);
       if (job && job.workersBooked > 0) {
-        await job.update({ workersBooked: job.workersBooked - 1, status: 'open' });
+        await JobPost.findByIdAndUpdate(job._id, {
+          $inc: { workersBooked: -1 },
+          status: 'open',
+        });
       }
     }
 
@@ -485,84 +455,63 @@ const cancelBooking = async (req, res) => {
   }
 };
 
-// ── GET ALL MY BOOKINGS ───────────────────────────────────────
+// ── GET MY BOOKINGS ───────────────────────────────────────────
 
-/**
- * @desc    Get current user's bookings (worker OR employer)
- * @route   GET /api/bookings
- * @access  Protected
- */
 const getMyBookings = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
-    let where = {};
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const filter = {};
 
     if (req.user.role === 'worker') {
-      const worker = await Worker.findOne({ where: { userId: req.user.id } });
+      // CHANGED: Worker.findOne({ where: { userId } }) → Worker.findOne({ userId })
+      const worker = await Worker.findOne({ userId: req.user._id });
       if (!worker) return sendError(res, 'Worker profile not found', 404);
-      where.workerId = worker.id;
+      filter.workerId = worker._id;
     } else if (req.user.role === 'employer') {
-      const employer = await Employer.findOne({ where: { userId: req.user.id } });
+      // CHANGED: Employer.findOne({ where: { userId } }) → Employer.findOne({ userId })
+      const employer = await Employer.findOne({ userId: req.user._id });
       if (!employer) return sendError(res, 'Employer profile not found', 404);
-      where.employerId = employer.id;
+      filter.employerId = employer._id;
     }
 
     if (status) {
-      // Handle comma-separated status string e.g. "pending,accepted,started"
+      // CHANGED: Op.in → $in; handle comma-separated string
       const statusArr = typeof status === 'string' && status.includes(',')
-        ? status.split(',').map(s => s.trim())
+        ? status.split(',').map((s) => s.trim())
         : status;
-      where.status = Array.isArray(statusArr) ? { [Op.in]: statusArr } : statusArr;
+      filter.status = Array.isArray(statusArr) ? { $in: statusArr } : statusArr;
     }
 
-    const { count, rows } = await Booking.findAndCountAll({
-      where,
-      include: [
-        { model: Worker, as: 'worker', required: false,
-          include: [{ model: User, as: 'user', attributes: ['name', 'profilePhoto'], required: false }] },
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', attributes: ['name', 'profilePhoto'], required: false }] },
-        { model: JobPost, as: 'jobPost', required: false,
-          include: [{ model: Category, as: 'category', required: false }] },
-        { model: Payment, as: 'payment', required: false },
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-      distinct: true,
-    });
+    // CHANGED: Booking.findAndCountAll() → Booking.find() + countDocuments()
+    const [rows, count] = await Promise.all([
+      populateBooking(
+        Booking.find(filter).sort({ createdAt: -1 }).limit(limitNum).skip((pageNum - 1) * limitNum)
+      ),
+      Booking.countDocuments(filter),
+    ]);
 
-    return sendPaginated(res, 'Bookings fetched', rows, count, page, limit);
+    return sendPaginated(res, 'Bookings fetched', rows, count, pageNum, limitNum);
   } catch (error) {
     logger.error('getMyBookings error:', error);
     return sendError(res, 'Failed to fetch bookings', 500);
   }
 };
 
-/**
- * @desc    Get single booking details
- * @route   GET /api/bookings/:id
- * @access  Protected
- */
+// ── GET BOOKING BY ID ─────────────────────────────────────────
+
 const getBookingById = async (req, res) => {
   try {
-    const booking = await Booking.findByPk(req.params.id, {
-      include: [
-        { model: Worker,   as: 'worker',   required: false,
-          include: [{ model: User, as: 'user', attributes: ['name','profilePhoto','phone'], required: false }] },
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', attributes: ['name','profilePhoto','phone'], required: false }] },
-        { model: JobPost,  as: 'jobPost',  required: false,
-          include: [{ model: Category, as: 'category', required: false }] },
-        { model: Payment,  as: 'payment',  required: false },
-      ],
-    });
-
+    // CHANGED: Booking.findByPk() → Booking.findById()
+    const booking = await populateBooking(Booking.findById(req.params.id));
     if (!booking) return sendError(res, 'Booking not found', 404);
 
-    // Only involved parties and admin can view
-    const isWorker = booking.worker.userId === req.user.id;
-    const isEmployer = booking.employer.userId === req.user.id;
+    const workerUserId = booking.workerId?.userId?._id?.toString();
+    const employerUserId = booking.employerId?.userId?._id?.toString();
+    const isWorker = workerUserId === req.user._id.toString();
+    const isEmployer = employerUserId === req.user._id.toString();
+
     if (!isWorker && !isEmployer && req.user.role !== 'admin') {
       return sendError(res, 'Not authorized to view this booking', 403);
     }

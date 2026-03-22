@@ -1,9 +1,6 @@
 /**
- * ================================================================
- * pages/AdminPanel.jsx — Platform Administration Dashboard
- * Stats overview, user management, dispute resolution.
- * Author: Digital Kaam Naka Dev Team
- * ================================================================
+ * pages/AdminPanel.jsx
+ * CHANGES: user.id → user._id (MongoDB ObjectId)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -39,7 +36,8 @@ const AdminPanel = () => {
     try {
       await api.put(`/admin/users/${userId}/verify`);
       toast.success('User पडताळला!');
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, isVerified: true } : u));
+      // CHANGED: u.id → u._id
+      setUsers(prev => prev.map(u => u._id?.toString() === userId?.toString() ? { ...u, isVerified: true } : u));
     } catch { toast.error('पडताळणी अयशस्वी'); }
   };
 
@@ -47,7 +45,8 @@ const AdminPanel = () => {
     try {
       await api.put(`/admin/users/${userId}/block`);
       toast.success(isActive ? 'User block केला' : 'User unblock केला');
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, isActive: !u.isActive } : u));
+      // CHANGED: u.id → u._id
+      setUsers(prev => prev.map(u => u._id?.toString() === userId?.toString() ? { ...u, isActive: !u.isActive } : u));
     } catch { toast.error('अयशस्वी'); }
   };
 
@@ -66,7 +65,6 @@ const AdminPanel = () => {
         <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>Digital Kaam Naka Platform Management</p>
       </div>
 
-      {/* Tab Navigation */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid var(--color-border)', marginBottom: 24 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -79,7 +77,6 @@ const AdminPanel = () => {
         ))}
       </div>
 
-      {/* ── DASHBOARD TAB ─────────────────────────────── */}
       {tab === 'dashboard' && stats && (
         <div>
           <div className="grid-4" style={{ marginBottom: 24, gap: 16 }}>
@@ -98,17 +95,9 @@ const AdminPanel = () => {
               </div>
             ))}
           </div>
-
-          <div className="card card-body" style={{ textAlign: 'center', padding: 32 }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📈</div>
-            <h3>Analytics Charts</h3>
-            <p style={{ color: 'var(--color-text-muted)' }}>Recharts integration — daily/weekly/monthly booking & revenue charts</p>
-            <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Connect Recharts with /admin/bookings & /admin/payments endpoints</p>
-          </div>
         </div>
       )}
 
-      {/* ── USERS TAB ─────────────────────────────────── */}
       {tab === 'users' && (
         <div>
           <div style={{ marginBottom: 16 }}>
@@ -127,8 +116,9 @@ const AdminPanel = () => {
                 </tr>
               </thead>
               <tbody>
+                {/* CHANGED: user.id → user._id */}
                 {users.map(user => (
-                  <tr key={user.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <tr key={user._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <img src={user.profilePhoto || `https://ui-avatars.com/api/?name=${user.name}&background=F97316&color=fff&size=32`}
@@ -156,12 +146,13 @@ const AdminPanel = () => {
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
+                        {/* CHANGED: user.id → user._id */}
                         {!user.isVerified && user.role !== 'admin' && (
-                          <button className="btn btn-success btn-sm" onClick={() => handleVerifyUser(user.id)}>✅ Verify</button>
+                          <button className="btn btn-success btn-sm" onClick={() => handleVerifyUser(user._id)}>✅ Verify</button>
                         )}
                         {user.role !== 'admin' && (
                           <button className={`btn btn-sm ${user.isActive ? 'btn-danger' : 'btn-light'}`}
-                            onClick={() => handleToggleBlock(user.id, user.isActive)}>
+                            onClick={() => handleToggleBlock(user._id, user.isActive)}>
                             {user.isActive ? '🚫 Block' : '✅ Unblock'}
                           </button>
                         )}
@@ -182,7 +173,7 @@ const AdminPanel = () => {
         <div className="card card-body" style={{ textAlign: 'center', padding: 40 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
           <h3>All Bookings</h3>
-          <p style={{ color: 'var(--color-text-muted)' }}>Connect /admin/bookings endpoint with status filters and date range</p>
+          <p style={{ color: 'var(--color-text-muted)' }}>Connect /admin/bookings endpoint</p>
         </div>
       )}
     </div>

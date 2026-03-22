@@ -23,7 +23,8 @@ const PaymentPage = () => {
     if (!window.confirm(`₹${parseInt(booking?.totalAmount).toLocaleString()} रोख पेमेंट confirm करायचे आहे का?`)) return;
     setProcessing(true);
     try {
-      const { data } = await paymentService.confirmCash(parseInt(bookingId));
+      // CHANGED: parseInt(bookingId) → bookingId (ObjectId, no parseInt)
+      const { data } = await paymentService.confirmCash(bookingId);
       if (data.success) {
         toast.success('✅ रोख पेमेंट confirm झाले!');
         navigate(`/rate/${bookingId}`);
@@ -35,7 +36,8 @@ const PaymentPage = () => {
   const handleOnlinePayment = async () => {
     setProcessing(true);
     try {
-      const { data } = await paymentService.createOrder(parseInt(bookingId));
+      // CHANGED: parseInt(bookingId) → bookingId
+      const { data } = await paymentService.createOrder(bookingId);
       if (!data.success) { toast.error('Order create होऊ शकला नाही'); setProcessing(false); return; }
 
       const loadRazorpay = () => new Promise((resolve) => {
@@ -45,7 +47,6 @@ const PaymentPage = () => {
         script.onload = resolve;
         document.head.appendChild(script);
       });
-
       await loadRazorpay();
 
       const options = {
@@ -53,12 +54,13 @@ const PaymentPage = () => {
         amount: data.data.amount,
         currency: data.data.currency,
         name: 'Digital Kaam Naka',
-        description: `Booking #${bookingId} Payment`,
+        description: `Booking Payment`,
         order_id: data.data.orderId,
         handler: async (response) => {
           try {
             const verRes = await paymentService.verify({
-              bookingId: parseInt(bookingId),
+              // CHANGED: parseInt(bookingId) → bookingId
+              bookingId: bookingId,
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature,
@@ -73,7 +75,6 @@ const PaymentPage = () => {
         theme: { color: '#F97316' },
         modal: { ondismiss: () => setProcessing(false) },
       };
-
       new window.Razorpay(options).open();
     } catch { toast.error('Payment सुरू करता आले नाही'); setProcessing(false); }
   };
@@ -87,7 +88,6 @@ const PaymentPage = () => {
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '32px 16px' }}>
       <h1 style={{ fontSize: 20, marginBottom: 24 }}>💰 Payment</h1>
-
       <div className="card card-body" style={{ marginBottom: 20 }}>
         {[
           ['काम रक्कम', `₹${parseInt(booking.totalAmount).toLocaleString()}`],
@@ -116,17 +116,14 @@ const PaymentPage = () => {
               background: method === opt.value ? 'var(--color-primary-light)' : 'white',
               borderColor: method === opt.value ? 'var(--color-primary)' : 'var(--color-border)',
             }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: method === opt.value ? 'var(--color-primary)' : 'var(--color-text)' }}>{opt.label}</div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>{opt.label}</div>
             <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>{opt.desc}</div>
           </button>
         ))}
       </div>
 
-      <button
-        className="btn btn-success btn-block btn-lg"
-        disabled={processing}
-        onClick={method === 'cash' ? handleCashPayment : handleOnlinePayment}
-      >
+      <button className="btn btn-success btn-block btn-lg" disabled={processing}
+        onClick={method === 'cash' ? handleCashPayment : handleOnlinePayment}>
         {processing ? <Loader text="Processing..." /> : method === 'cash' ? '✅ रोख Payment Confirm' : '💳 Online Payment करा'}
       </button>
     </div>

@@ -1,18 +1,12 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useNotifications } from '../context/NotificationContext';
 
 const TYPE_ICONS = {
-  booking_request:   '📅',
-  booking_accepted:  '✅',
-  booking_rejected:  '❌',
-  booking_completed: '🎉',
-  payment_received:  '💰',
-  new_rating:        '⭐',
-  urgent_job_nearby: '🚨',
-  system:            '📢',
-  promotion:         '🎁',
+  booking_request:'📅', booking_accepted:'✅', booking_rejected:'❌',
+  booking_completed:'🎉', payment_received:'💰', new_rating:'⭐',
+  urgent_job_nearby:'🚨', system:'📢', promotion:'🎁',
 };
 
 const NotificationsPage = () => {
@@ -30,7 +24,8 @@ const NotificationsPage = () => {
   };
 
   const handleClick = async (notif) => {
-    if (!notif.isRead) await markOneRead(notif.id);
+    // CHANGED: notif.id → notif._id
+    if (!notif.isRead) await markOneRead(notif._id);
     if (notif.referenceType === 'booking') navigate(`/bookings/${notif.referenceId}`);
   };
 
@@ -57,9 +52,7 @@ const NotificationsPage = () => {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
-          लोड होत आहे...
-        </div>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>लोड होत आहे...</div>
       ) : notifications.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-text-muted)' }}>
           <div style={{ fontSize: 64, marginBottom: 16 }}>🔕</div>
@@ -67,41 +60,28 @@ const NotificationsPage = () => {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* CHANGED: notif.id → notif._id */}
           {notifications.map(notif => {
             const { title, message } = getLocalizedContent(notif);
             return (
               <div
-                key={notif.id}
+                key={notif._id}
                 onClick={() => handleClick(notif)}
                 style={{
                   padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
                   background: notif.isRead ? 'white' : 'var(--color-primary-light)',
                   border: `1px solid ${notif.isRead ? 'var(--color-border)' : 'var(--color-primary)'}`,
                   display: 'flex', gap: 12, alignItems: 'flex-start',
-                  transition: 'all 0.2s',
                 }}
               >
-                <span style={{ fontSize: 28, flexShrink: 0 }}>
-                  {TYPE_ICONS[notif.type] || '🔔'}
-                </span>
+                <span style={{ fontSize: 28, flexShrink: 0 }}>{TYPE_ICONS[notif.type] || '🔔'}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: notif.isRead ? 500 : 700, fontSize: 14, marginBottom: 2 }}>
-                    {title}
-                  </div>
-                  {message && (
-                    <div style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                      {message}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                    {timeAgo(notif.createdAt)}
-                  </div>
+                  <div style={{ fontWeight: notif.isRead ? 500 : 700, fontSize: 14, marginBottom: 2 }}>{title}</div>
+                  {message && <div style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>{message}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>{timeAgo(notif.createdAt)}</div>
                 </div>
                 {!notif.isRead && (
-                  <div style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: 'var(--color-primary)', flexShrink: 0, marginTop: 4
-                  }} />
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0, marginTop: 4 }} />
                 )}
               </div>
             );

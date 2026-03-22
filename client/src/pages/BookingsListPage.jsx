@@ -62,9 +62,14 @@ const BookingsListPage = () => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {bookings.map(booking => {
-            const otherParty = isWorker ? booking.employer?.user : booking.worker?.user;
+            // CHANGED: booking.employer?.user → booking.employerId?.userId
+            //          booking.worker?.user  → booking.workerId?.userId
+            const otherParty = isWorker
+              ? booking.employerId?.userId
+              : booking.workerId?.userId;
             return (
-              <Link key={booking.id} to={`/bookings/${booking.id}`}
+              // CHANGED: booking.id → booking._id
+              <Link key={booking._id} to={`/bookings/${booking._id}`}
                 style={{ textDecoration: 'none', display: 'block' }}>
                 <div className="card card-body" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <img

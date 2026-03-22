@@ -51,7 +51,7 @@ if (!token) {
         return next(new Error('Invalid or expired token'));
       }
 
-      const user = await User.findByPk(decoded.id);
+      const user = await User.findById(decoded.id);
       if (!user || !user.isActive) {
         return next(new Error('User not found or inactive'));
       }

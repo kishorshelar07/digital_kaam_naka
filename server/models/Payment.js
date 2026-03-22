@@ -1,122 +1,69 @@
 /**
  * ================================================================
- * models/Payment.js — Payment Model (TABLE 9)
- * Records every financial transaction. Integrates with Razorpay
- * for UPI/card payments, also tracks cash payments.
+ * models/Payment.js — Payment Model (MongoDB / Mongoose)
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Payment = sequelize.define('Payment', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const PaymentSchema = new mongoose.Schema(
+  {
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      required: true,
+      unique: true, // One payment per booking
+    },
+
+    employerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employer',
+      required: true,
+    },
+
+    workerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Worker',
+      required: true,
+    },
+
+    amount: { type: Number, required: true },
+    platformFee: { type: Number, default: 0.0 },
+    workerAmount: { type: Number, default: null },
+
+    method: {
+      type: String,
+      enum: ['cash', 'upi', 'card', 'netbanking', 'wallet'],
+      default: 'cash',
+    },
+
+    status: {
+      type: String,
+      enum: ['pending', 'completed', 'failed', 'refunded'],
+      default: 'pending',
+    },
+
+    // Razorpay identifiers (null for cash payments)
+    razorpayOrderId: { type: String, default: null },
+    razorpayPaymentId: { type: String, default: null },
+    razorpaySignature: { type: String, default: null },
+
+    transactionId: { type: String, default: null },
+
+    paidAt: { type: Date, default: null },
+    refundReason: { type: String, default: null },
+    refundedAt: { type: Date, default: null },
   },
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+    collection: 'payments',
+  }
+);
 
-  bookingId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    unique: true, // One payment per booking
-    field: 'booking_id',
-    references: { model: 'bookings', key: 'id' },
-  },
 
-  employerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'employer_id',
-    references: { model: 'employers', key: 'id' },
-  },
+PaymentSchema.index({ workerId: 1 });
+PaymentSchema.index({ employerId: 1 });
 
-  workerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'worker_id',
-    references: { model: 'workers', key: 'id' },
-  },
-
-  // Total amount charged to employer
-  amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-  },
-
-  // Platform fee (5% of amount)
-  platformFee: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0.00,
-    field: 'platform_fee',
-  },
-
-  // Amount actually received by worker
-  workerAmount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-    field: 'worker_amount',
-  },
-
-  method: {
-    type: DataTypes.ENUM('cash', 'upi', 'card', 'netbanking', 'wallet'),
-    defaultValue: 'cash',
-  },
-
-  status: {
-    type: DataTypes.ENUM('pending', 'completed', 'failed', 'refunded'),
-    defaultValue: 'pending',
-  },
-
-  // Razorpay identifiers (null for cash payments)
-  razorpayOrderId: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-    field: 'razorpay_order_id',
-  },
-
-  razorpayPaymentId: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-    field: 'razorpay_payment_id',
-  },
-
-  razorpaySignature: {
-    type: DataTypes.STRING(500),
-    allowNull: true,
-    field: 'razorpay_signature',
-  },
-
-  // Generic transaction ID (for UPI/bank transfers)
-  transactionId: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-    field: 'transaction_id',
-  },
-
-  paidAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    field: 'paid_at',
-  },
-
-  refundReason: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    field: 'refund_reason',
-  },
-
-  refundedAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    field: 'refunded_at',
-  },
-}, {
-  tableName: 'payments',
-  timestamps: true,
-  updatedAt: false,
-  underscored: true,
-});
-
-module.exports = Payment;
+module.exports = mongoose.model('Payment', PaymentSchema);

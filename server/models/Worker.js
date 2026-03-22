@@ -1,199 +1,143 @@
 /**
  * ================================================================
- * models/Worker.js — Worker Profile Model (TABLE 2)
- * Extends User with worker-specific data: skills, rates, location,
- * availability toggle, and Aadhar verification info.
+ * models/Worker.js — Worker Profile Model (MongoDB / Mongoose)
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
+ * Extends User with worker-specific data.
+ * GPS location stored as GeoJSON Point for $near queries.
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Worker = sequelize.define('Worker', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    unique: true,
-    field: 'user_id',
-    references: { model: 'users', key: 'id' },
-    onDelete: 'CASCADE',
-  },
-
-  // Government ID for identity verification
-  aadharNumber: {
-    type: DataTypes.STRING(20),
-    allowNull: true,
-    field: 'aadhar_number',
-    validate: {
-      is: {
-        args: /^\d{12}$/,
-        msg: 'Aadhar number must be 12 digits',
-      },
+const WorkerSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      unique: true,
     },
-  },
 
-  aadharPhoto: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-    field: 'aadhar_photo', // Cloudinary URL
-  },
-
-  // How much worker charges per day in INR
-  dailyRate: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    field: 'daily_rate',
-    validate: {
-      min: { args: [100], msg: 'Daily rate must be at least ₹100' },
-      max: { args: [50000], msg: 'Daily rate cannot exceed ₹50,000' },
+    aadharNumber: {
+      type: String,
+      match: [/^\d{12}$/, 'Aadhar number must be 12 digits'],
+      default: null,
     },
-  },
 
-  experienceYrs: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'experience_yrs',
-    validate: {
-      min: { args: [0], msg: 'Experience cannot be negative' },
-      max: { args: [50], msg: 'Experience cannot exceed 50 years' },
+    aadharPhoto: {
+      type: String, // Cloudinary URL
+      default: null,
     },
-  },
 
-  bio: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    validate: {
-      len: { args: [0, 500], msg: 'Bio cannot exceed 500 characters' },
+    dailyRate: {
+      type: Number,
+      required: [true, 'Daily rate is required'],
+      min: [100, 'Daily rate must be at least ₹100'],
+      max: [50000, 'Daily rate cannot exceed ₹50,000'],
     },
-  },
 
-  // Cumulative stats — updated after each booking
-  totalJobs: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'total_jobs',
-  },
+    experienceYrs: {
+      type: Number,
+      default: 0,
+      min: [0, 'Experience cannot be negative'],
+      max: [50, 'Experience cannot exceed 50 years'],
+    },
 
-  avgRating: {
-    type: DataTypes.DECIMAL(3, 2),
-    defaultValue: 0.00,
-    field: 'avg_rating',
-    validate: {
+    bio: {
+      type: String,
+      maxlength: [500, 'Bio cannot exceed 500 characters'],
+      default: '',
+    },
+
+    totalJobs: {
+      type: Number,
+      default: 0,
+    },
+
+    avgRating: {
+      type: Number,
+      default: 0.0,
       min: 0,
       max: 5,
     },
-  },
 
-  // ── THE CORE FEATURE: "Aaj Uplabdh Ahe" toggle ───────────
-  // Worker turns this ON in morning → employers can find them
-  isAvailable: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    field: 'is_available',
-  },
-
-  // Admin verifies Aadhar → verified badge shown on profile
-  isVerified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    field: 'is_verified',
-  },
-
-  // Current GPS coordinates (updated when availability is toggled ON)
-  latitude: {
-    type: DataTypes.DECIMAL(10, 8),
-    allowNull: true,
-    validate: {
-      min: -90,
-      max: 90,
+    // ── THE CORE FEATURE: "Aaj Uplabdh Ahe" toggle ────────────
+    isAvailable: {
+      type: Boolean,
+      default: false,
     },
-  },
 
-  longitude: {
-    type: DataTypes.DECIMAL(11, 8),
-    allowNull: true,
-    validate: {
-      min: -180,
-      max: 180,
+    isVerified: {
+      type: Boolean,
+      default: false,
     },
-  },
 
-  // Address fields for Maharashtra-specific search
-  address: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-
-  city: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-
-  taluka: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-
-  district: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-
-  state: {
-    type: DataTypes.STRING(50),
-    defaultValue: 'Maharashtra',
-  },
-
-  pincode: {
-    type: DataTypes.STRING(10),
-    allowNull: true,
-    validate: {
-      is: {
-        args: /^\d{6}$/,
-        msg: 'Pincode must be 6 digits',
+    // GeoJSON Point for MongoDB $near / $geoWithin queries
+    // REPLACES: PostGIS lat/lng columns
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude] — MongoDB convention
+        default: undefined,
       },
     },
-  },
 
-  // Total earnings on platform (for analytics)
-  totalEarnings: {
-    type: DataTypes.DECIMAL(12, 2),
-    defaultValue: 0.00,
-    field: 'total_earnings',
+    // Keep flat lat/lng for convenience (populated alongside location)
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+
+    address: { type: String, default: null },
+    city: { type: String, default: null },
+    taluka: { type: String, default: null },
+    district: { type: String, default: null },
+    state: { type: String, default: 'Maharashtra' },
+
+    pincode: {
+      type: String,
+      match: [/^\d{6}$/, 'Pincode must be 6 digits'],
+      default: null,
+    },
+
+    totalEarnings: {
+      type: Number,
+      default: 0.0,
+    },
   },
-}, {
-  tableName: 'workers',
-  timestamps: true,
-  underscored: true,
-});
+  {
+    timestamps: true,
+    collection: 'workers',
+  }
+);
+
+// ── Indexes ───────────────────────────────────────────────────
+
+WorkerSchema.index({ location: '2dsphere' }); // For $near GPS queries
+WorkerSchema.index({ isAvailable: 1 });
+WorkerSchema.index({ district: 1 });
+WorkerSchema.index({ avgRating: -1 });
+WorkerSchema.index({ dailyRate: 1 });
+
+// ── Instance Methods ──────────────────────────────────────────
 
 /**
- * @desc    Calculate distance from a given point using Haversine formula
- * @param   {number} lat - Reference latitude
- * @param   {number} lng - Reference longitude
- * @returns {number} Distance in kilometers
+ * Calculate distance from a given point (Haversine formula)
+ * Used as fallback when not using $near
  */
-Worker.prototype.distanceFrom = function (lat, lng) {
+WorkerSchema.methods.distanceFrom = function (lat, lng) {
   if (!this.latitude || !this.longitude) return null;
-
-  const R = 6371; // Earth's radius in km
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
   const dLat = toRad(lat - this.latitude);
   const dLng = toRad(lng - this.longitude);
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(this.latitude)) * Math.cos(toRad(lat)) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return parseFloat((R * c).toFixed(1));
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(this.latitude)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+  return parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
 };
 
-const toRad = (deg) => (deg * Math.PI) / 180;
-
-module.exports = Worker;
+module.exports = mongoose.model('Worker', WorkerSchema);

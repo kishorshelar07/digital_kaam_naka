@@ -1,10 +1,14 @@
 /**
+ * ================================================================
  * controllers/paymentController.js — Razorpay Payment Controller
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
+ * ================================================================
  */
 
 const crypto = require('crypto');
-const { Booking, Payment, Worker, Employer } = require('../models');
+const mongoose = require('mongoose');
+const { Booking, Payment, Worker } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHelper');
 const { notifyPaymentReceived } = require('../config/socket');
 const logger = require('../utils/logger');
@@ -22,18 +26,19 @@ try {
   logger.warn('Razorpay not configured');
 }
 
-/**
- * @desc    Create Razorpay payment order
- * @route   POST /api/payments/create-order
- */
+// ── CREATE RAZORPAY ORDER ─────────────────────────────────────
+
 const createPaymentOrder = async (req, res) => {
   try {
     const { bookingId } = req.body;
-    const booking = await Booking.findByPk(bookingId, { include: ['payment'] });
+
+    // CHANGED: Booking.findByPk(id, { include: ['payment'] })
+    //       → Booking.findById(id).populate('paymentId')
+    const booking = await Booking.findById(bookingId).populate('paymentId');
     if (!booking) return sendError(res, 'Booking not found', 404);
     if (booking.status !== 'completed') return sendError(res, 'Booking must be completed before payment', 400);
 
-    const payment = booking.payment;
+    const payment = booking.paymentId;
     if (!payment) return sendError(res, 'Payment record not found', 404);
     if (payment.status === 'completed') return sendError(res, 'Already paid', 400);
 
@@ -46,7 +51,8 @@ const createPaymentOrder = async (req, res) => {
       notes: { bookingId: String(bookingId) },
     });
 
-    await payment.update({ razorpayOrderId: order.id });
+    // CHANGED: payment.update({ razorpayOrderId }) → Payment.findByIdAndUpdate()
+    await Payment.findByIdAndUpdate(payment._id, { razorpayOrderId: order.id });
 
     return sendSuccess(res, 'Payment order created', {
       orderId: order.id,
@@ -60,10 +66,8 @@ const createPaymentOrder = async (req, res) => {
   }
 };
 
-/**
- * @desc    Verify Razorpay payment signature
- * @route   POST /api/payments/verify
- */
+// ── VERIFY RAZORPAY PAYMENT ───────────────────────────────────
+
 const verifyPayment = async (req, res) => {
   try {
     const { bookingId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -77,10 +81,12 @@ const verifyPayment = async (req, res) => {
       return sendError(res, 'Payment verification failed. Invalid signature.', 400);
     }
 
-    const payment = await Payment.findOne({ where: { bookingId } });
+    // CHANGED: Payment.findOne({ where: { bookingId } }) → Payment.findOne({ bookingId })
+    const payment = await Payment.findOne({ bookingId });
     if (!payment) return sendError(res, 'Payment record not found', 404);
 
-    await payment.update({
+    // CHANGED: payment.update({}) → Payment.findByIdAndUpdate()
+    await Payment.findByIdAndUpdate(payment._id, {
       status: 'completed',
       razorpayOrderId,
       razorpayPaymentId,
@@ -89,12 +95,12 @@ const verifyPayment = async (req, res) => {
       paidAt: new Date(),
     });
 
-    await Worker.increment('totalEarnings', {
-      by: payment.workerAmount,
-      where: { id: payment.workerId },
+    // CHANGED: Worker.increment('totalEarnings') → Worker.findByIdAndUpdate($inc)
+    await Worker.findByIdAndUpdate(payment.workerId, {
+      $inc: { totalEarnings: payment.workerAmount },
     });
 
-    const worker = await Worker.findByPk(payment.workerId);
+    const worker = await Worker.findById(payment.workerId);
     if (req.app.get('io') && worker) {
       notifyPaymentReceived(req.app.get('io'), worker.userId, {
         amount: payment.workerAmount,
@@ -109,25 +115,30 @@ const verifyPayment = async (req, res) => {
   }
 };
 
-/**
- * @desc    Confirm cash payment
- * @route   POST /api/payments/confirm-cash
- */
+// ── CONFIRM CASH PAYMENT ──────────────────────────────────────
+
 const confirmCashPayment = async (req, res) => {
   try {
     const { bookingId } = req.body;
-    const payment = await Payment.findOne({ where: { bookingId } });
+
+    // CHANGED: Payment.findOne({ where: { bookingId } }) → Payment.findOne({ bookingId })
+    const payment = await Payment.findOne({ bookingId });
     if (!payment) return sendError(res, 'Payment not found', 404);
     if (payment.status === 'completed') return sendError(res, 'Already confirmed', 400);
 
-    await payment.update({ status: 'completed', method: 'cash', paidAt: new Date() });
-
-    await Worker.increment('totalEarnings', {
-      by: payment.workerAmount,
-      where: { id: payment.workerId },
+    // CHANGED: payment.update({}) → Payment.findByIdAndUpdate()
+    await Payment.findByIdAndUpdate(payment._id, {
+      status: 'completed',
+      method: 'cash',
+      paidAt: new Date(),
     });
 
-    const worker = await Worker.findByPk(payment.workerId);
+    // CHANGED: Worker.increment() → Worker.findByIdAndUpdate($inc)
+    await Worker.findByIdAndUpdate(payment.workerId, {
+      $inc: { totalEarnings: payment.workerAmount },
+    });
+
+    const worker = await Worker.findById(payment.workerId);
     if (req.app.get('io') && worker) {
       notifyPaymentReceived(req.app.get('io'), worker.userId, {
         amount: payment.workerAmount,

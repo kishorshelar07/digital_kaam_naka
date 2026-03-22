@@ -1,13 +1,15 @@
 /**
  * ================================================================
  * controllers/authController.js — Authentication Controller
- * Handles OTP-based login (primary), registration, logout.
- * Flow: sendOtp → verifyOtp → register (if new user) → JWT issued
+ * FIXED:
+ *  - Removed .populate('workerProfile') / .populate('employerProfile')
+ *    because User schema has NO workerProfile/employerProfile fields.
+ *    Instead, manually fetch Worker/Employer by userId after auth.
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { User, Worker, Employer } = require('../models');
+const { User, Worker, Employer, WorkerSkill } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHelper');
 const {
   generateAccessToken,
@@ -18,6 +20,7 @@ const {
   generateOTP,
   getOtpExpiry,
 } = require('../utils/tokenHelper');
+const { buildGeoPoint } = require('../utils/gpsHelper');
 const { sendOtpSMS } = require('../utils/sendSMS');
 const { uploadToCloudinary } = require('../config/cloudinary');
 const logger = require('../utils/logger');
@@ -26,66 +29,73 @@ const OTP_MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_ATTEMPTS) || 3;
 const OTP_BLOCK_MINS   = parseInt(process.env.OTP_BLOCK_MINS)   || 30;
 const OTP_EXPIRE_MINS  = parseInt(process.env.OTP_EXPIRE_MINS)  || 10;
 
-// ── SEND OTP ─────────────────────────────────────────────────
+// ── HELPER: Build full user object with profile ───────────────
+// FIXED: User has no workerProfile/employerProfile refs.
+// We fetch Worker/Employer separately via userId and attach manually.
+const getUserWithProfile = async (userId, role) => {
+  const user = await User.findById(userId).lean();
+  if (!user) return null;
 
-/**
- * @desc    Send OTP to phone number
- * @route   POST /api/auth/send-otp
- * @access  Public
- */
+  if (role === 'worker' || user.role === 'worker') {
+    const workerProfile = await Worker.findOne({ userId }).lean();
+    if (workerProfile) {
+      const skills = await WorkerSkill.find({ workerId: workerProfile._id })
+        .populate({ path: 'categoryId', model: 'Category' })
+        .lean();
+      user.workerProfile = { ...workerProfile, skills };
+    }
+  } else if (role === 'employer' || user.role === 'employer') {
+    user.employerProfile = await Employer.findOne({ userId }).lean();
+  }
+
+  return user;
+};
+
+// ── SEND OTP ──────────────────────────────────────────────────
+
 const sendOtp = async (req, res) => {
   try {
     const { phone } = req.body;
 
-    // Find or prepare user record
-    let user = await User.scope('withOtp').findOne({ where: { phone } });
+    let user = await User.findOne({ phone }).select(
+      '+otp +otpExpires +otpAttempts +otpBlockedUntil'
+    );
 
-    if (user) {
-      // Check if user is blocked from OTP requests
-      if (user.otpBlockedUntil && new Date() < new Date(user.otpBlockedUntil)) {
-        const minsLeft = Math.ceil((new Date(user.otpBlockedUntil) - new Date()) / 60000);
-        return sendError(res, `Too many attempts. Try again in ${minsLeft} minutes.`, 429);
-      }
+    if (user?.otpBlockedUntil && new Date() < new Date(user.otpBlockedUntil)) {
+      const minsLeft = Math.ceil((new Date(user.otpBlockedUntil) - new Date()) / 60000);
+      return sendError(res, `Too many attempts. Try again in ${minsLeft} minutes.`, 429);
     }
 
-    // Generate new OTP
     const otp = generateOTP();
     const otpExpires = getOtpExpiry(OTP_EXPIRE_MINS);
 
-    // In development, log OTP (never in production)
     if (process.env.NODE_ENV === 'development') {
       logger.info(`📱 DEV OTP for ${phone}: ${otp}`);
     }
 
     if (user) {
-      // Reset attempts and set new OTP
-      await user.update({
-        otp,
-        otpExpires,
-        otpAttempts: 0,
-        otpBlockedUntil: null,
-      });
+      user.otp = otp;
+      user.otpExpires = otpExpires;
+      user.otpAttempts = 0;
+      user.otpBlockedUntil = null;
+      await user.save();
     } else {
-      // User doesn't exist yet — store OTP temporarily
-      // They'll complete registration after OTP verification
       user = await User.create({
         phone,
         otp,
         otpExpires,
-        role: 'worker', // Temporary, updated during registration
+        role: 'worker',
         name: 'Pending Registration',
         isVerified: false,
         isActive: true,
       });
     }
 
-    // Send OTP via SMS (gracefully handle SMS failure)
     const smsSent = await sendOtpSMS(phone, otp, 'mr');
 
     return sendSuccess(res, 'OTP sent successfully', {
       phone,
       otpSent: smsSent,
-      // Include OTP in response ONLY in development mode
       ...(process.env.NODE_ENV === 'development' && { devOtp: otp }),
       expiresInMinutes: OTP_EXPIRE_MINS,
     });
@@ -97,85 +107,66 @@ const sendOtp = async (req, res) => {
 
 // ── VERIFY OTP ────────────────────────────────────────────────
 
-/**
- * @desc    Verify OTP and login or redirect to registration
- * @route   POST /api/auth/verify-otp
- * @access  Public
- */
 const verifyOtp = async (req, res) => {
   try {
     const { phone, otp } = req.body;
 
-    const user = await User.scope('withOtp').findOne({ where: { phone } });
+    const user = await User.findOne({ phone }).select(
+      '+otp +otpExpires +otpAttempts +otpBlockedUntil'
+    );
 
-    if (!user) {
-      return sendError(res, 'Phone number not found. Please request OTP first.', 404);
-    }
+    if (!user) return sendError(res, 'Phone number not found. Please request OTP first.', 404);
 
-    // Verify OTP using model method
     const { valid, reason } = user.verifyOtp(otp);
 
     if (!valid) {
-      // Increment failed attempts
       const attempts = (user.otpAttempts || 0) + 1;
-      const updateData = { otpAttempts: attempts };
-
-      // Block after max attempts
+      user.otpAttempts = attempts;
       if (attempts >= OTP_MAX_ATTEMPTS) {
-        updateData.otpBlockedUntil = new Date(Date.now() + OTP_BLOCK_MINS * 60 * 1000);
-        updateData.otpAttempts = 0;
+        user.otpBlockedUntil = new Date(Date.now() + OTP_BLOCK_MINS * 60 * 1000);
+        user.otpAttempts = 0;
       }
-
-      await user.update(updateData);
+      await user.save();
       return sendError(res, reason, 400);
     }
 
-    // OTP verified — clear it from DB
-    await user.update({
-      otp: null,
-      otpExpires: null,
-      otpAttempts: 0,
-      otpBlockedUntil: null,
-      lastLogin: new Date(),
-    });
+    // Clear OTP
+    user.otp = null;
+    user.otpExpires = null;
+    user.otpAttempts = 0;
+    user.otpBlockedUntil = null;
+    user.lastLogin = new Date();
+    await user.save();
 
-    // Check if user has completed registration
     const isRegistered = user.name !== 'Pending Registration';
+
+    // FIXED: check profile via Worker/Employer.findOne({ userId })
     const hasProfile = await (
       user.role === 'worker'
-        ? Worker.findOne({ where: { userId: user.id } })
-        : Employer.findOne({ where: { userId: user.id } })
+        ? Worker.findOne({ userId: user._id })
+        : Employer.findOne({ userId: user._id })
     );
 
     const needsRegistration = !isRegistered || !hasProfile;
 
     if (needsRegistration) {
-      // Issue a short-lived registration token
-      const regToken = generateAccessToken({ id: user.id, role: 'pending', phone });
+      const regToken = generateAccessToken({ id: user._id, role: 'pending', phone });
       setTokenCookie(res, regToken);
-
       return sendSuccess(res, 'OTP verified. Please complete registration.', {
         needsRegistration: true,
-        userId: user.id,
+        userId: user._id,
         phone,
         token: regToken,
       });
     }
 
-    // Fully registered — issue full access token
-    const tokenPayload = { id: user.id, role: user.role, phone: user.phone };
+    const tokenPayload = { id: user._id, role: user.role, phone: user.phone };
     const accessToken = generateAccessToken(tokenPayload);
-    const refreshToken = generateRefreshToken({ id: user.id });
-
+    generateRefreshToken({ id: user._id });
     setTokenCookie(res, accessToken);
 
-    // Fetch user with profile
-    const userWithProfile = await User.findByPk(user.id, {
-      include: [
-        { model: Worker, as: 'workerProfile', required: false },
-        { model: Employer, as: 'employerProfile', required: false },
-      ],
-    });
+    // FIXED: fetch profile manually instead of .populate('workerProfile')
+    const userWithProfile = await getUserWithProfile(user._id, user.role);
 
     return sendSuccess(res, 'Login successful! Welcome back.', {
       needsRegistration: false,
@@ -190,21 +181,13 @@ const verifyOtp = async (req, res) => {
 
 // ── COMPLETE REGISTRATION ─────────────────────────────────────
 
-/**
- * @desc    Complete profile after OTP verification
- * @route   POST /api/auth/register
- * @access  Protected (requires registration token)
- */
 const register = async (req, res) => {
   try {
-    const { id: userId } = req.user;
+    const userId = req.user._id;
     const {
       name, role, language,
-      // Worker-specific
       dailyRate, city, district, state, pincode, experienceYrs, bio,
-      // Employer-specific
       companyName, employerType, gstNumber,
-      // Shared
       latitude, longitude, address,
     } = req.body;
 
@@ -212,62 +195,83 @@ const register = async (req, res) => {
       return sendError(res, 'Role must be worker or employer', 400);
     }
 
-    // Update user base profile
-    await User.update(
-      { name, role, language: language || 'mr' },
-      { where: { id: userId } }
-    );
+    await User.findByIdAndUpdate(userId, {
+      name,
+      role,
+      language: language || 'mr',
+    });
 
-    // Handle profile photo upload
     let profilePhotoUrl = null;
     if (req.file) {
       profilePhotoUrl = await uploadToCloudinary(req.file.buffer, 'profiles', `user_${userId}`);
-      await User.update({ profilePhoto: profilePhotoUrl }, { where: { id: userId } });
+      await User.findByIdAndUpdate(userId, { profilePhoto: profilePhotoUrl });
     }
 
-    let profile;
+    const location = buildGeoPoint(latitude, longitude);
+    const latNum = latitude ? parseFloat(latitude) : null;
+    const lngNum = longitude ? parseFloat(longitude) : null;
 
     if (role === 'worker') {
-      // Create or update worker profile
-      [profile] = await Worker.upsert({
-        userId,
-        dailyRate: parseFloat(dailyRate),
-        city, district,
-        state: state || 'Maharashtra',
-        pincode, address,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        experienceYrs: parseInt(experienceYrs) || 0,
-        bio: bio || '',
-      }, { returning: true });
+      await Worker.findOneAndUpdate(
+        { userId },
+        {
+          userId,
+          dailyRate: parseFloat(dailyRate),
+          city, district,
+          state: state || 'Maharashtra',
+          pincode, address,
+          latitude: latNum,
+          longitude: lngNum,
+          location,
+          experienceYrs: parseInt(experienceYrs) || 0,
+          bio: bio || '',
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      // Save skills if provided
+      const skills = req.body.skills ? JSON.parse(req.body.skills) : [];
+      if (skills.length > 0) {
+        const worker = await Worker.findOne({ userId });
+        if (worker) {
+          const { WorkerSkill } = require('../models');
+          await WorkerSkill.deleteMany({ workerId: worker._id });
+          await WorkerSkill.insertMany(
+            skills.map(s => ({
+              workerId: worker._id,
+              categoryId: s.categoryId,
+              level: s.level || 'experienced',
+              yearsInSkill: s.yearsInSkill || 0,
+            }))
+          );
+        }
+      }
     } else {
-      // Create or update employer profile
-      [profile] = await Employer.upsert({
-        userId,
-        companyName: companyName || '',
-        employerType: employerType || 'individual',
-        gstNumber: gstNumber || null,
-        city, district,
-        state: state || 'Maharashtra',
-        address,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-      }, { returning: true });
+      await Employer.findOneAndUpdate(
+        { userId },
+        {
+          userId,
+          companyName: companyName || '',
+          employerType: employerType || 'individual',
+          gstNumber: gstNumber || null,
+          city, district,
+          state: state || 'Maharashtra',
+          address,
+          latitude: latNum,
+          longitude: lngNum,
+          location,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
     }
 
-    // Issue full access token now that registration is complete
     const tokenPayload = { id: userId, role, phone: req.user.phone };
     const accessToken = generateAccessToken(tokenPayload);
-    const refreshToken = generateRefreshToken({ id: userId });
-
+    generateRefreshToken({ id: userId });
     setTokenCookie(res, accessToken);
 
-    const user = await User.findByPk(userId, {
-      include: [
-        { model: Worker, as: 'workerProfile', required: false },
-        { model: Employer, as: 'employerProfile', required: false },
-      ],
-    });
+    // FIXED: fetch profile manually instead of .populate('workerProfile')
+    const user = await getUserWithProfile(userId, role);
 
     return sendSuccess(res, 'Registration complete! Welcome to Digital Kaam Naka! 🎉', {
       user,
@@ -281,11 +285,6 @@ const register = async (req, res) => {
 
 // ── LOGOUT ────────────────────────────────────────────────────
 
-/**
- * @desc    Logout user — clear JWT cookie
- * @route   POST /api/auth/logout
- * @access  Protected
- */
 const logout = async (req, res) => {
   clearTokenCookie(res);
   return sendSuccess(res, 'Logged out successfully');
@@ -293,23 +292,11 @@ const logout = async (req, res) => {
 
 // ── GET CURRENT USER ──────────────────────────────────────────
 
-/**
- * @desc    Get currently logged in user with profile
- * @route   GET /api/auth/me
- * @access  Protected
- */
 const getMe = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id, {
-      include: [
-        {
-          model: Worker, as: 'workerProfile', required: false,
-          include: [{ association: 'skills', include: ['category'] }],
-        },
-        { model: Employer, as: 'employerProfile', required: false },
-      ],
-    });
-
+    // FIXED: fetch profile manually instead of .populate('workerProfile')
+    const user = await getUserWithProfile(req.user._id, req.user.role);
+    if (!user) return sendError(res, 'User not found', 404);
     return sendSuccess(res, 'User profile fetched', user);
   } catch (error) {
     logger.error('getMe error:', error);
@@ -319,11 +306,6 @@ const getMe = async (req, res) => {
 
 // ── REFRESH TOKEN ─────────────────────────────────────────────
 
-/**
- * @desc    Issue new access token using refresh token
- * @route   POST /api/auth/refresh-token
- * @access  Public (requires valid refresh token in cookie)
- */
 const refreshToken = async (req, res) => {
   try {
     const token = req.cookies?.refreshToken || req.body?.refreshToken;
@@ -332,10 +314,10 @@ const refreshToken = async (req, res) => {
     const decoded = verifyToken(token, true);
     if (!decoded) return sendError(res, 'Invalid refresh token', 401);
 
-    const user = await User.findByPk(decoded.id);
+    const user = await User.findById(decoded.id);
     if (!user || !user.isActive) return sendError(res, 'User not found', 401);
 
-    const newAccessToken = generateAccessToken({ id: user.id, role: user.role, phone: user.phone });
+    const newAccessToken = generateAccessToken({ id: user._id, role: user.role, phone: user.phone });
     setTokenCookie(res, newAccessToken);
 
     return sendSuccess(res, 'Token refreshed', { token: newAccessToken });

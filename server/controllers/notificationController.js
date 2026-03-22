@@ -1,46 +1,61 @@
 /**
+ * ================================================================
  * controllers/notificationController.js — Notification Controller
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
+ *
+ * KEY CHANGES:
+ *  - Notification.findAndCountAll({ where })
+ *    → Notification.find(filter) + Notification.countDocuments(filter)
+ *  - Notification.update({}, { where }) → Notification.updateMany({})
+ *  - req.user.id → req.user._id
  * Author: Digital Kaam Naka Dev Team
+ * ================================================================
  */
 
 const { Notification } = require('../models');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/responseHelper');
 const logger = require('../utils/logger');
 
-/**
- * @desc    Get all notifications for current user
- * @route   GET /api/notifications
- */
+// ── GET ALL NOTIFICATIONS ─────────────────────────────────────
+
 const getNotifications = async (req, res) => {
   try {
     const { type, isRead, page = 1, limit = 20 } = req.query;
-    const where = { userId: req.user.id };
-    if (type)    where.type   = type;
-    if (isRead !== undefined) where.isRead = isRead === 'true';
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
-    const { count, rows } = await Notification.findAndCountAll({
-      where,
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-    });
+    // CHANGED: { userId: req.user.id } → { userId: req.user._id }
+    const filter = { userId: req.user._id };
+    if (type) filter.type = type;
+    if (isRead !== undefined) filter.isRead = isRead === 'true';
 
-    return sendPaginated(res, 'Notifications fetched', rows, count, page, limit);
+    // CHANGED: Notification.findAndCountAll({ where, order, limit, offset })
+    //       → Notification.find(filter) + Notification.countDocuments(filter)
+    const [rows, count] = await Promise.all([
+      Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum)
+        .lean(),
+      Notification.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 'Notifications fetched', rows, count, pageNum, limitNum);
   } catch (error) {
     logger.error('getNotifications error:', error);
     return sendError(res, 'Failed to fetch notifications', 500);
   }
 };
 
-/**
- * @desc    Mark all notifications as read
- * @route   PUT /api/notifications/read-all
- */
+// ── MARK ALL AS READ ──────────────────────────────────────────
+
 const markAllRead = async (req, res) => {
   try {
-    await Notification.update(
-      { isRead: true, readAt: new Date() },
-      { where: { userId: req.user.id, isRead: false } }
+    // CHANGED: Notification.update({}, { where: { userId, isRead: false } })
+    //       → Notification.updateMany({})
+    await Notification.updateMany(
+      { userId: req.user._id, isRead: false },
+      { isRead: true, readAt: new Date() }
     );
     return sendSuccess(res, 'All notifications marked as read');
   } catch (error) {
@@ -49,15 +64,15 @@ const markAllRead = async (req, res) => {
   }
 };
 
-/**
- * @desc    Mark one notification as read
- * @route   PUT /api/notifications/:id/read
- */
+// ── MARK ONE AS READ ──────────────────────────────────────────
+
 const markOneRead = async (req, res) => {
   try {
-    await Notification.update(
-      { isRead: true, readAt: new Date() },
-      { where: { id: req.params.id, userId: req.user.id } }
+    // CHANGED: Notification.update({}, { where: { id, userId } })
+    //       → Notification.findOneAndUpdate({ _id, userId })
+    await Notification.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      { isRead: true, readAt: new Date() }
     );
     return sendSuccess(res, 'Notification marked as read');
   } catch (error) {

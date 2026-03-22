@@ -1,112 +1,141 @@
 /**
  * ================================================================
- * utils/gpsHelper.js — GPS & Distance Calculation Utilities
- * Haversine formula for distance. PostGIS SQL builder for DB queries.
- * Used to find workers near employer and jobs near worker.
+ * utils/gpsHelper.js — GPS / Geospatial Helper (MongoDB Version)
+ * REPLACES: PostGIS-based bounding box + ST_DWithin approach
+ * NOW USES:  MongoDB 2dsphere index + $near / $geoWithin operators
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { sequelize } = require('../config/db');
-
 /**
- * @desc    Calculate distance between two GPS coordinates (Haversine formula)
- * @param   {number} lat1 - Latitude of point 1
- * @param   {number} lon1 - Longitude of point 1
- * @param   {number} lat2 - Latitude of point 2
- * @param   {number} lon2 - Longitude of point 2
- * @returns {number} Distance in kilometers (rounded to 1 decimal)
+ * @desc    Validate that lat/lng are proper numbers in valid range
+ * @param   {any} lat
+ * @param   {any} lng
+ * @returns {boolean}
  */
-const haversineDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Earth's radius in km
-  const toRad = (deg) => (deg * Math.PI) / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return parseFloat((R * c).toFixed(1));
+const isValidCoordinates = (lat, lng) => {
+  const la = parseFloat(lat);
+  const lo = parseFloat(lng);
+  return !isNaN(la) && !isNaN(lo) && la >= -90 && la <= 90 && lo >= -180 && lo <= 180;
 };
 
 /**
- * @desc    Build Sequelize literal for PostGIS distance ordering
- *          Used in SQL ORDER BY to sort results by GPS distance
- * @param   {number} lat - Reference latitude (employer's location)
- * @param   {number} lng - Reference longitude
- * @returns {Sequelize.literal} Raw SQL for distance calculation
+ * @desc    Build a MongoDB $near query for a 2dsphere-indexed `location` field.
+ *          Use this in Worker.find({ location: buildNearQuery(lat, lng, radiusKm) })
+ *
+ * @param   {number} lat       - Reference latitude
+ * @param   {number} lng       - Reference longitude
+ * @param   {number} radiusKm  - Search radius in kilometres
+ * @returns {Object}           - MongoDB $near query object
+ *
+ * REPLACES: buildRadiusWhere() (PostGIS bounding box SQL approach)
+ *
+ * Example usage in controller:
+ *   const workers = await Worker.find({
+ *     isAvailable: true,
+ *     location: buildNearQuery(lat, lng, 20)
+ *   });
  */
-const buildDistanceLiteral = (lat, lng) => {
-  return sequelize.literal(`
-    (6371 * acos(
-      cos(radians(${parseFloat(lat)}))
-      * cos(radians(latitude))
-      * cos(radians(longitude) - radians(${parseFloat(lng)}))
-      + sin(radians(${parseFloat(lat)}))
-      * sin(radians(latitude))
-    ))
-  `);
-};
+const buildNearQuery = (lat, lng, radiusKm = 20) => ({
+  $near: {
+    $geometry: {
+      type: 'Point',
+      coordinates: [parseFloat(lng), parseFloat(lat)], // NOTE: MongoDB is [lng, lat]
+    },
+    $maxDistance: radiusKm * 1000, // MongoDB uses metres
+  },
+});
 
 /**
- * @desc    Build WHERE clause to filter records within a radius
- *          Uses bounding box first (fast) then haversine (accurate)
- * @param   {number} lat      - Center latitude
- * @param   {number} lng      - Center longitude
- * @param   {number} radiusKm - Search radius in kilometers
- * @returns {Object} Sequelize WHERE clause object
+ * @desc    Build a MongoDB $geoWithin query.
+ *          Slightly faster than $near because it does NOT sort by distance.
+ *          Use when you only need "workers inside radius" without distance ordering.
+ *
+ * @param   {number} lat
+ * @param   {number} lng
+ * @param   {number} radiusKm
+ * @returns {Object}
  */
-const buildRadiusWhere = (lat, lng, radiusKm = 20) => {
-  const { Op } = require('sequelize');
+const buildWithinQuery = (lat, lng, radiusKm = 20) => ({
+  $geoWithin: {
+    $centerSphere: [
+      [parseFloat(lng), parseFloat(lat)],
+      radiusKm / 6371, // Convert km to radians (Earth radius = 6371 km)
+    ],
+  },
+});
 
-  // Approximate degree offsets for bounding box (fast pre-filter)
-  const latDelta = radiusKm / 111; // 1 degree lat ≈ 111 km
-  const lngDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
-
+/**
+ * @desc    Build a GeoJSON Point object to store in a document's `location` field.
+ *          Call this whenever a worker/employer sets their coordinates.
+ *
+ * @param   {number} lat
+ * @param   {number} lng
+ * @returns {Object|null}  GeoJSON Point or null if coordinates invalid
+ *
+ * Example:
+ *   await Worker.findByIdAndUpdate(workerId, {
+ *     latitude: lat,
+ *     longitude: lng,
+ *     location: buildGeoPoint(lat, lng),
+ *   });
+ */
+const buildGeoPoint = (lat, lng) => {
+  if (!isValidCoordinates(lat, lng)) return undefined;
   return {
-    latitude: {
-      [Op.between]: [lat - latDelta, lat + latDelta],
-    },
-    longitude: {
-      [Op.between]: [lng - lngDelta, lng + lngDelta],
-    },
+    type: 'Point',
+    coordinates: [parseFloat(lng), parseFloat(lat)], // [lng, lat] — MongoDB convention
   };
 };
 
 /**
- * @desc    Validate GPS coordinates
- * @param   {*} lat - Latitude value
- * @param   {*} lng - Longitude value
- * @returns {boolean} true if valid coordinates
+ * @desc    Calculate straight-line distance between two GPS points
+ *          using the Haversine formula.
+ *          Use this to filter/annotate results after a $geoWithin query.
+ *
+ * @param   {number} lat1
+ * @param   {number} lng1
+ * @param   {number} lat2
+ * @param   {number} lng2
+ * @returns {number}  Distance in kilometres (1 decimal place)
  */
-const isValidCoordinates = (lat, lng) => {
-  const latNum = parseFloat(lat);
-  const lngNum = parseFloat(lng);
-  return (
-    !isNaN(latNum) && !isNaN(lngNum) &&
-    latNum >= -90 && latNum <= 90 &&
-    lngNum >= -180 && lngNum <= 180
-  );
+const haversineDistance = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
 };
 
 /**
- * @desc    Format distance for display (in km or meters)
- * @param   {number} km - Distance in kilometers
- * @returns {string} Formatted string e.g. "1.2 km" or "500 m"
+ * @desc    Annotate an array of worker/document objects with their distance
+ *          from a reference point. Useful after $geoWithin queries.
+ *
+ * @param   {Array}  docs     - Array of Mongoose documents with latitude/longitude fields
+ * @param   {number} refLat   - Reference latitude
+ * @param   {number} refLng   - Reference longitude
+ * @returns {Array}           - Same docs with a `distance` field added (in km)
  */
-const formatDistance = (km) => {
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  return `${km.toFixed(1)} km`;
+const annotateWithDistance = (docs, refLat, refLng) => {
+  return docs.map((doc) => {
+    const obj = doc.toObject ? doc.toObject() : { ...doc };
+    if (obj.latitude && obj.longitude) {
+      obj.distance = haversineDistance(refLat, refLng, obj.latitude, obj.longitude);
+    } else {
+      obj.distance = null;
+    }
+    return obj;
+  });
 };
 
 module.exports = {
-  haversineDistance,
-  buildDistanceLiteral,
-  buildRadiusWhere,
   isValidCoordinates,
-  formatDistance,
+  buildNearQuery,
+  buildWithinQuery,
+  buildGeoPoint,
+  haversineDistance,
+  annotateWithDistance,
 };

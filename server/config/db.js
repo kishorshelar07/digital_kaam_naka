@@ -1,74 +1,39 @@
 /**
- * config/db.js — Database Configuration
- * Uses DATABASE_URL for production (Render + Supabase)
+ * config/db.js — MongoDB Database Configuration (Mongoose)
+ * Converted from PostgreSQL + Sequelize → MongoDB + Mongoose
  * Author: Digital Kaam Naka Dev Team
  */
 
-const { Sequelize } = require('sequelize');
+const mongoose = require('mongoose');
 const logger = require('../utils/logger');
-
-let sequelize;
-
-// Production: use DATABASE_URL directly
-if (process.env.DATABASE_URL) {
-  sequelize = new Sequelize(process.env.DATABASE_URL, {
-    dialect: 'postgres',
-    logging: false,
-    pool: { max: 10, min: 2, acquire: 30000, idle: 10000 },
-    dialectOptions: {
-      ssl: { require: true, rejectUnauthorized: false },
-    },
-    define: {
-      underscored: true,
-      timestamps: true,
-      freezeTableName: true,
-    },
-  });
-} else {
-  // Development: use individual env vars
-  sequelize = new Sequelize(
-    process.env.DB_NAME || 'kaamnaka_db',
-    process.env.DB_USER || 'postgres',
-    process.env.DB_PASS || '',
-    {
-      host:    process.env.DB_HOST || 'localhost',
-      port:    parseInt(process.env.DB_PORT) || 5432,
-      dialect: 'postgres',
-      logging: false,
-      pool: { max: 10, min: 2, acquire: 30000, idle: 10000 },
-      dialectOptions: { ssl: false },
-      define: {
-        underscored: true,
-        timestamps: true,
-        freezeTableName: true,
-      },
-    }
-  );
-}
 
 const connectDB = async () => {
   try {
-    logger.info('Connecting to database...');
-    logger.info('Using DATABASE_URL:', process.env.DATABASE_URL ? 'YES' : 'NO');
+    logger.info('Connecting to MongoDB...');
 
-    await sequelize.authenticate();
-    logger.info('✅ PostgreSQL connected successfully');
+    const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/kaamnaka_db';
 
-    try {
-      await sequelize.query('CREATE EXTENSION IF NOT EXISTS postgis;');
-      logger.info('✅ PostGIS extension enabled');
-    } catch (e) {
-      logger.warn('PostGIS skip:', e.message);
-    }
-      await sequelize.sync({ alter: true });
-    logger.info('✅ Database tables synced');
-    logger.info('✅ Database ready');
+    await mongoose.connect(mongoUri, {
+      // Mongoose 7+ does not need these options, but keeping for clarity
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
+
+    logger.info('✅ MongoDB connected successfully');
+    logger.info(`✅ Connected to database: ${mongoose.connection.name}`);
+
+    mongoose.connection.on('error', (err) => {
+      logger.error('❌ MongoDB connection error:', err.message);
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      logger.warn('⚠️ MongoDB disconnected');
+    });
 
   } catch (error) {
-    logger.error('❌ Database connection failed:', error.message);
-    logger.error('DATABASE_URL set:', !!process.env.DATABASE_URL);
+    logger.error('❌ MongoDB connection failed:', error.message);
     process.exit(1);
   }
 };
 
-module.exports = { sequelize, connectDB };
+module.exports = { connectDB, mongoose };

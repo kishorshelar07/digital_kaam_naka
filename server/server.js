@@ -1,12 +1,15 @@
 /**
  * ================================================================
  * server.js — Application Entry Point
- * Sets up Express + Socket.IO, applies all middleware,
- * connects to DB, and starts listening for requests.
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
+ *
+ * CHANGES FROM PostgreSQL VERSION:
+ *  - connectDB() now connects to MongoDB via Mongoose
+ *  - No sequelize.sync() call needed (Mongoose handles collections)
+ *  - Graceful shutdown now also closes mongoose connection
  *
  * Author: Digital Kaam Naka Dev Team
  * Platform: Digital Kaam Naka — digitalkamnaka.in
- * Mission: Digitizing Maharashtra's Naka System
  * ================================================================
  */
 
@@ -21,6 +24,8 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
+// CHANGED: mongoose imported here for graceful shutdown
+const mongoose = require('mongoose');
 
 const { connectDB } = require('./config/db');
 const { initializeSocket } = require('./config/socket');
@@ -28,13 +33,13 @@ const apiRoutes = require('./routes/index');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const logger = require('./utils/logger');
 
-// ── Initialize Express app ────────────────────────────────────
+// ── Initialize Express ────────────────────────────────────────
 const app = express();
 const httpServer = http.createServer(app);
 
 // ── Security Middleware ───────────────────────────────────────
 app.use(helmet({
-  crossOriginEmbedderPolicy: false, // Allow Cloudinary images
+  crossOriginEmbedderPolicy: false,
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -45,10 +50,22 @@ app.use(helmet({
   },
 }));
 
-// ── CORS Configuration ────────────────────────────────────────
+// ── CORS ──────────────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true,           // Allow cookies
+  origin: (origin, callback) => {
+    const allowed = [
+      'http://localhost:3000',
+      'https://digital-kaam-naka.vercel.app',
+      process.env.CLIENT_URL,
+    ].filter(Boolean);
+
+    if (!origin || allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -67,38 +84,36 @@ if (process.env.NODE_ENV === 'development') {
   }));
 }
 
-// ── Global Rate Limiting ──────────────────────────────────────
-// 100 requests per minute per IP for general routes
+// ── Rate Limiting ─────────────────────────────────────────────
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 100 : 1000,
   message: { success: false, message: 'Too many requests. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => process.env.NODE_ENV === 'development', // Skip in dev
+  skip: () => process.env.NODE_ENV === 'development',
 });
 app.use('/api', generalLimiter);
 
 // ── API Routes ────────────────────────────────────────────────
 app.use('/api', apiRoutes);
 
-// ── Root endpoint ─────────────────────────────────────────────
+// ── Root Endpoint ─────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     success: true,
     message: '🏗️ Digital Kaam Naka API — Ghari Basa, Kaam Mila!',
-    docs: '/api/health',
-    version: '1.0.0',
+    db: 'MongoDB',
+    version: '2.0.0',
   });
 });
 
-// ── 404 & Global Error Handler ────────────────────────────────
+// ── Error Handlers ────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
-// ── Initialize Socket.IO ──────────────────────────────────────
+// ── Socket.IO ─────────────────────────────────────────────────
 const io = initializeSocket(httpServer);
-// Make io accessible in controllers via req.app.get('io')
 app.set('io', io);
 
 // ── Start Server ──────────────────────────────────────────────
@@ -106,12 +121,13 @@ const PORT = parseInt(process.env.PORT) || 5000;
 
 const startServer = async () => {
   try {
-    // Connect to PostgreSQL + sync models
+    // CHANGED: connects to MongoDB (not PostgreSQL)
+    // No sequelize.sync() needed — Mongoose handles collections automatically
     await connectDB();
 
     httpServer.listen(PORT, () => {
       logger.info('================================================');
-      logger.info(`🚀 Digital Kaam Naka Server Started`);
+      logger.info('🚀 Digital Kaam Naka Server Started (MongoDB)');
       logger.info(`🌐 API:    http://localhost:${PORT}/api`);
       logger.info(`🔌 Socket: ws://localhost:${PORT}`);
       logger.info(`🌍 Env:    ${process.env.NODE_ENV || 'development'}`);
@@ -124,9 +140,12 @@ const startServer = async () => {
 };
 
 // ── Graceful Shutdown ─────────────────────────────────────────
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received. Shutting down gracefully...');
-  httpServer.close(() => {
+  httpServer.close(async () => {
+    // CHANGED: also close mongoose connection on shutdown
+    await mongoose.connection.close();
+    logger.info('MongoDB connection closed.');
     logger.info('HTTP server closed.');
     process.exit(0);
   });
@@ -134,7 +153,6 @@ process.on('SIGTERM', () => {
 
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled Promise Rejection:', reason);
-  // Don't crash in production — just log it
   if (process.env.NODE_ENV !== 'production') process.exit(1);
 });
 

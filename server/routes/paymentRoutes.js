@@ -1,5 +1,6 @@
 /**
  * routes/paymentRoutes.js
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
  */
 const express = require('express');
@@ -17,22 +18,33 @@ router.post('/confirm-cash', protect, authorize('employer'), confirmCashPayment)
 router.get('/history', protect, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    let where = {};
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    const filter = {};
     if (req.user.role === 'worker') {
-      const worker = await Worker.findOne({ where: { userId: req.user.id } });
-      if (worker) where.workerId = worker.id;
+      // CHANGED: Worker.findOne({ where: { userId: req.user.id } }) → Worker.findOne({ userId })
+      const worker = await Worker.findOne({ userId: req.user._id });
+      if (worker) filter.workerId = worker._id;
     } else {
-      const employer = await Employer.findOne({ where: { userId: req.user.id } });
-      if (employer) where.employerId = employer.id;
+      // CHANGED: Employer.findOne({ where: { userId: req.user.id } }) → Employer.findOne({ userId })
+      const employer = await Employer.findOne({ userId: req.user._id });
+      if (employer) filter.employerId = employer._id;
     }
-    const { count, rows } = await Payment.findAndCountAll({
-      where,
-      include: ['booking'],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: (page - 1) * parseInt(limit),
-    });
-    return sendPaginated(res, 'Payment history', rows, count, page, limit);
+
+    // CHANGED: Payment.findAndCountAll() → Payment.find() + countDocuments()
+    const [rows, count] = await Promise.all([
+      Payment.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum)
+        // CHANGED: include: ['booking'] → .populate('bookingId')
+        .populate('bookingId')
+        .lean(),
+      Payment.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 'Payment history', rows, count, pageNum, limitNum);
   } catch (e) {
     return sendError(res, 'Failed', 500);
   }

@@ -50,7 +50,10 @@ export const NotificationProvider = ({ children }) => {
   const markOneRead = async (id) => {
     try {
       await notificationService.markOneRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      // CHANGED: n.id === id → compare as strings (MongoDB ObjectId)
+      setNotifications(prev => prev.map(n =>
+        n._id?.toString() === id?.toString() ? { ...n, isRead: true } : n
+      ));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch {}
   };

@@ -1,54 +1,41 @@
 /**
  * ================================================================
- * models/WorkerSkill.js — Worker Skills Junction Table (TABLE 5)
- * Links workers to categories with skill level indicators.
- * A worker can have multiple skills across different categories.
+ * models/WorkerSkill.js — Worker Skills Junction (MongoDB / Mongoose)
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const WorkerSkill = sequelize.define('WorkerSkill', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const WorkerSkillSchema = new mongoose.Schema(
+  {
+    workerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Worker',
+      required: true,
+    },
+
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',
+      required: true,
+    },
+
+    level: {
+      type: String,
+      enum: ['beginner', 'experienced', 'expert'],
+      default: 'beginner',
+    },
+
+    yearsInSkill: { type: Number, default: 0 },
   },
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+    collection: 'worker_skills',
+  }
+);
 
-  workerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'worker_id',
-    references: { model: 'workers', key: 'id' },
-    onDelete: 'CASCADE',
-  },
+WorkerSkillSchema.index({ workerId: 1, categoryId: 1 });
 
-  categoryId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'category_id',
-    references: { model: 'categories', key: 'id' },
-  },
-
-  // Skill level affects worker's visibility in search rankings
-  level: {
-    type: DataTypes.ENUM('beginner', 'experienced', 'expert'),
-    defaultValue: 'beginner',
-  },
-
-  // Years of experience in THIS specific skill
-  yearsInSkill: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'years_in_skill',
-  },
-}, {
-  tableName: 'worker_skills',
-  timestamps: true,
-  underscored: true,
-  updatedAt: false,
-});
-
-module.exports = WorkerSkill;
+module.exports = mongoose.model('WorkerSkill', WorkerSkillSchema);

@@ -1,5 +1,6 @@
 /**
  * routes/employerRoutes.js
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
  */
 const express = require('express');
@@ -11,9 +12,9 @@ const { authorize } = require('../middleware/roleMiddleware');
 
 router.get('/:id', async (req, res) => {
   try {
-    const employer = await Employer.findByPk(req.params.id, {
-      include: [{ model: User, as: 'user', attributes: ['name', 'profilePhoto', 'isVerified', 'createdAt'] }],
-    });
+    // CHANGED: Employer.findByPk(id, { include: [User] }) → Employer.findById().populate()
+    const employer = await Employer.findById(req.params.id)
+      .populate({ path: 'userId', select: 'name profilePhoto isVerified createdAt' });
     if (!employer) return sendError(res, 'Employer not found', 404);
     return sendSuccess(res, 'Employer profile fetched', employer);
   } catch (e) {
@@ -23,15 +24,20 @@ router.get('/:id', async (req, res) => {
 
 router.put('/:id', protect, authorize('employer', 'admin'), async (req, res) => {
   try {
-    const employer = await Employer.findByPk(req.params.id);
+    // CHANGED: Employer.findByPk() → Employer.findById()
+    const employer = await Employer.findById(req.params.id);
     if (!employer) return sendError(res, 'Not found', 404);
-    if (employer.userId !== req.user.id && req.user.role !== 'admin') {
+
+    // CHANGED: employer.userId !== req.user.id → .toString() comparison
+    if (employer.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return sendError(res, 'Not authorized', 403);
     }
+
     const allowed = ['companyName', 'employerType', 'gstNumber', 'address', 'city', 'district', 'pincode', 'latitude', 'longitude'];
-    const updates = {};
-    allowed.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
-    await employer.update(updates);
+    allowed.forEach((f) => { if (req.body[f] !== undefined) employer[f] = req.body[f]; });
+
+    // CHANGED: employer.update({}) → employer.save()
+    await employer.save();
     return sendSuccess(res, 'Employer profile updated', employer);
   } catch (e) {
     return sendError(res, 'Update failed', 500);
@@ -40,19 +46,32 @@ router.put('/:id', protect, authorize('employer', 'admin'), async (req, res) => 
 
 router.get('/:id/bookings', protect, async (req, res) => {
   try {
-    const employer = await Employer.findByPk(req.params.id);
+    // CHANGED: Employer.findByPk() → Employer.findById()
+    const employer = await Employer.findById(req.params.id);
     if (!employer) return sendError(res, 'Not found', 404);
+
     const { page = 1, limit = 10, status } = req.query;
-    const where = { employerId: employer.id };
-    if (status) where.status = status;
-    const { count, rows } = await Booking.findAndCountAll({
-      where,
-      include: ['worker', 'jobPost', 'payment'],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: (page - 1) * limit,
-    });
-    return sendPaginated(res, 'Bookings fetched', rows, count, page, limit);
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    const filter = { employerId: employer._id };
+    if (status) filter.status = status;
+
+    // CHANGED: Booking.findAndCountAll() → Booking.find() + countDocuments()
+    const [rows, count] = await Promise.all([
+      Booking.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum)
+        // CHANGED: include: ['worker','jobPost','payment'] → .populate()
+        .populate({ path: 'workerId', populate: { path: 'userId', select: 'name profilePhoto' } })
+        .populate({ path: 'jobPostId', populate: { path: 'categoryId', model: 'Category' } })
+        .populate('paymentId')
+        .lean(),
+      Booking.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 'Bookings fetched', rows, count, pageNum, limitNum);
   } catch (e) {
     return sendError(res, 'Failed', 500);
   }

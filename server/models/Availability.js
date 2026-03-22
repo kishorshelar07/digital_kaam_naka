@@ -1,101 +1,65 @@
 /**
  * ================================================================
- * models/Availability.js — Worker Availability Model (TABLE 6)
- * Tracks when and where a worker is available each day.
- * This is the CORE of the digital Naka system —
- * workers set availability from home, employers see it in real-time.
+ * models/Availability.js — Worker Availability Model (MongoDB / Mongoose)
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Availability = sequelize.define('Availability', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-
-  workerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'worker_id',
-    references: { model: 'workers', key: 'id' },
-    onDelete: 'CASCADE',
-  },
-
-  // Date for which this availability is set
-  date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false,
-  },
-
-  isAvailable: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-    field: 'is_available',
-  },
-
-  // Working hours window (default: 6 AM to 8 PM)
-  startTime: {
-    type: DataTypes.TIME,
-    defaultValue: '06:00:00',
-    field: 'start_time',
-  },
-
-  endTime: {
-    type: DataTypes.TIME,
-    defaultValue: '20:00:00',
-    field: 'end_time',
-  },
-
-  // Worker's GPS when they marked themselves available
-  latitude: {
-    type: DataTypes.DECIMAL(10, 8),
-    allowNull: true,
-  },
-
-  longitude: {
-    type: DataTypes.DECIMAL(11, 8),
-    allowNull: true,
-  },
-
-  // How far worker is willing to travel from their location
-  radiusKm: {
-    type: DataTypes.INTEGER,
-    defaultValue: 20,
-    field: 'radius_km',
-    validate: {
-      min: { args: [1], msg: 'Radius must be at least 1 km' },
-      max: { args: [200], msg: 'Radius cannot exceed 200 km' },
+const AvailabilitySchema = new mongoose.Schema(
+  {
+    workerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Worker',
+      required: true,
     },
+
+    // Date for which this availability is set (store as Date, compare by day)
+    date: {
+      type: Date,
+      required: true,
+    },
+
+    isAvailable: { type: Boolean, default: true },
+
+    // Working hours window (stored as "HH:MM:SS" strings)
+    startTime: { type: String, default: '06:00:00' },
+    endTime: { type: String, default: '20:00:00' },
+
+    // Worker's GPS when they marked themselves available
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+
+    // GeoJSON for geo queries
+    location: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: undefined },
+    },
+
+    radiusKm: {
+      type: Number,
+      default: 20,
+      min: [1, 'Radius must be at least 1 km'],
+      max: [200, 'Radius cannot exceed 200 km'],
+    },
+
+    // Specific category ObjectIds available for this day
+    availableForCategories: [
+      { type: mongoose.Schema.Types.ObjectId, ref: 'Category' }
+    ],
+
+    note: { type: String, maxlength: 200, default: null },
   },
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+    collection: 'availability',
+  }
+);
 
-  // Specific work types available for this day (optional)
-  availableForCategories: {
-    type: DataTypes.ARRAY(DataTypes.INTEGER),
-    defaultValue: [],
-    field: 'available_for_categories',
-  },
+AvailabilitySchema.index({ workerId: 1, date: 1 });
+AvailabilitySchema.index({ date: 1, isAvailable: 1 });
+AvailabilitySchema.index({ location: '2dsphere' });
 
-  // Note for this availability (e.g. "available only after 9 AM")
-  note: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-  },
-}, {
-  tableName: 'availability',
-  timestamps: true,
-  updatedAt: false,
-  underscored: true,
-
-  indexes: [
-    // Compound index for fast "who is available today near me" queries
-    { fields: ['worker_id', 'date'] },
-    { fields: ['date', 'is_available'] },
-  ],
-});
-
-module.exports = Availability;
+module.exports = mongoose.model('Availability', AvailabilitySchema);

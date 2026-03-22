@@ -1,54 +1,93 @@
 /**
- * models/locationDisputeAdmin.js
- * Location and Dispute models
+ * ================================================================
+ * models/locationDisputeAdmin.js — Location & Dispute Models (MongoDB / Mongoose)
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
+ * ================================================================
  */
 
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-// TABLE 13: locations
-const Location = sequelize.define('Location', {
-  id:        { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  state:     { type: DataTypes.STRING(100), defaultValue: 'Maharashtra' },
-  district:  { type: DataTypes.STRING(100), allowNull: false },
-  taluka:    { type: DataTypes.STRING(100), allowNull: true },
-  city:      { type: DataTypes.STRING(100), allowNull: true },
-  pincode:   { type: DataTypes.STRING(10),  allowNull: true },
-  latitude:  { type: DataTypes.DECIMAL(10, 8), allowNull: true },
-  longitude: { type: DataTypes.DECIMAL(11, 8), allowNull: true },
-  isActive:  { type: DataTypes.BOOLEAN, defaultValue: true, field: 'is_active' },
-}, {
-  tableName: 'locations',
-  timestamps: false,
-  underscored: true,
-});
+// ── Location ──────────────────────────────────────────────────
+const LocationSchema = new mongoose.Schema(
+  {
+    state: { type: String, default: 'Maharashtra' },
+    district: { type: String, required: true },
+    taluka: { type: String, default: null },
+    city: { type: String, default: null },
+    pincode: { type: String, default: null },
 
-// TABLE 14: disputes
-const Dispute = sequelize.define('Dispute', {
-  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  bookingId: {
-    type: DataTypes.INTEGER, allowNull: false, field: 'booking_id',
-    references: { model: 'bookings', key: 'id' },
+    location: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: undefined },
+    },
+
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    isActive: { type: Boolean, default: true },
   },
-  raisedBy: {
-    type: DataTypes.INTEGER, allowNull: false, field: 'raised_by',
-    references: { model: 'users', key: 'id' },
+  {
+    timestamps: false,
+    collection: 'locations',
+  }
+);
+
+LocationSchema.index({ location: '2dsphere' });
+LocationSchema.index({ district: 1, taluka: 1 });
+
+// ── Dispute ───────────────────────────────────────────────────
+const DisputeSchema = new mongoose.Schema(
+  {
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      required: true,
+    },
+
+    raisedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+
+    against: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+
+    reason: { type: String, required: true },
+
+    // Cloudinary evidence URLs (replaces ARRAY(DataTypes.STRING))
+    evidenceUrls: [{ type: String }],
+
+    status: {
+      type: String,
+      enum: ['open', 'under_review', 'resolved', 'closed'],
+      default: 'open',
+    },
+
+    resolution: { type: String, default: null },
+
+    resolvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+
+    resolvedAt: { type: Date, default: null },
   },
-  against: {
-    type: DataTypes.INTEGER, allowNull: false,
-    references: { model: 'users', key: 'id' },
-  },
-  reason:       { type: DataTypes.TEXT, allowNull: false },
-  evidenceUrls: { type: DataTypes.ARRAY(DataTypes.STRING), defaultValue: [], field: 'evidence_urls' },
-  status:       { type: DataTypes.ENUM('open', 'under_review', 'resolved', 'closed'), defaultValue: 'open' },
-  resolution:   { type: DataTypes.TEXT, allowNull: true },
-  resolvedBy:   { type: DataTypes.INTEGER, allowNull: true, field: 'resolved_by' },
-  resolvedAt:   { type: DataTypes.DATE, allowNull: true, field: 'resolved_at' },
-}, {
-  tableName: 'disputes',
-  timestamps: true,
-  underscored: true,
-});
+  {
+    timestamps: true,
+    collection: 'disputes',
+  }
+);
+
+DisputeSchema.index({ bookingId: 1 });
+DisputeSchema.index({ raisedBy: 1 });
+DisputeSchema.index({ status: 1 });
+
+const Location = mongoose.model('Location', LocationSchema);
+const Dispute = mongoose.model('Dispute', DisputeSchema);
 
 module.exports = { Location, Dispute };

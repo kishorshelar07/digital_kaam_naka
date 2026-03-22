@@ -1,133 +1,148 @@
 /**
  * ================================================================
  * controllers/jobController.js — Job Post CRUD Controller
- * Employers post jobs here. Workers see nearby jobs on their dashboard.
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { Op } = require('sequelize');
-const { JobPost, Employer, Category, Booking, Worker, User } = require('../models');
+const { JobPost, Employer, Category, Worker, User } = require('../models');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/responseHelper');
-const { buildRadiusWhere, buildDistanceLiteral, isValidCoordinates } = require('../utils/gpsHelper');
+const { buildNearQuery, buildGeoPoint, annotateWithDistance, isValidCoordinates } = require('../utils/gpsHelper');
 const { sendMulticastPush } = require('../utils/sendPushNotif');
 const logger = require('../utils/logger');
 
-/**
- * @desc    Get all jobs with filters
- * @route   GET /api/jobs
- * @access  Public
- */
+// ── GET ALL JOBS ──────────────────────────────────────────────
+
 const getAllJobs = async (req, res) => {
   try {
     const { category, district, city, isUrgent, status = 'open', page = 1, limit = 12, sort = 'newest' } = req.query;
-    const where = {};
-    if (status) where.status = status;
-    if (category) where.categoryId = category;
-    if (district) where.district = district;
-    if (city) where.city = city;
-    if (isUrgent === 'true') where.isUrgent = true;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
-    const orderMap = {
-      newest: [['createdAt', 'DESC']],
-      rate_high: [['dailyRate', 'DESC']],
-      rate_low: [['dailyRate', 'ASC']],
-      urgent: [['isUrgent', 'DESC'], ['createdAt', 'DESC']],
+    // CHANGED: Sequelize where + Op → plain MongoDB filter
+    const filter = {};
+    if (status) filter.status = status;
+    if (category) filter.categoryId = category;
+    if (district) filter.district = district;
+    if (city) filter.city = city;
+    if (isUrgent === 'true') filter.isUrgent = true;
+
+    // CHANGED: Sequelize order arrays → Mongoose sort object
+    const sortMap = {
+      newest: { createdAt: -1 },
+      rate_high: { dailyRate: -1 },
+      rate_low: { dailyRate: 1 },
+      urgent: { isUrgent: -1, createdAt: -1 },
     };
 
-    const { count, rows } = await JobPost.findAndCountAll({
-      where,
-      include: [
-        { model: Employer, as: 'employer', include: [{ model: User, as: 'user', attributes: ['name', 'profilePhoto'] }] },
-        { model: Category, as: 'category' },
-      ],
-      order: orderMap[sort] || orderMap.newest,
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-    });
+    // CHANGED: JobPost.findAndCountAll() → JobPost.find() + countDocuments()
+    const [rows, count] = await Promise.all([
+      JobPost.find(filter)
+        .sort(sortMap[sort] || sortMap.newest)
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum)
+        // CHANGED: include: [Employer, Category] → .populate()
+        .populate({
+          path: 'employerId',
+          populate: { path: 'userId', select: 'name profilePhoto' },
+        })
+        .populate('categoryId')
+        .lean(),
+      JobPost.countDocuments(filter),
+    ]);
 
-    return sendPaginated(res, 'Jobs fetched', rows, count, page, limit);
+    return sendPaginated(res, 'Jobs fetched', rows, count, pageNum, limitNum);
   } catch (error) {
     logger.error('getAllJobs error:', error);
     return sendError(res, 'Failed to fetch jobs', 500);
   }
 };
 
-/**
- * @desc    Get jobs near worker's location
- * @route   GET /api/jobs/nearby
- * @access  Protected (worker)
- */
+// ── GET NEARBY JOBS (GPS) ─────────────────────────────────────
+
 const getNearbyJobs = async (req, res) => {
   try {
     const { lat, lng, radius = 30, category, page = 1, limit = 20 } = req.query;
-    if (!lat || !lng || !isValidCoordinates(lat, lng)) return sendError(res, 'Valid location required', 400);
+    if (!lat || !lng || !isValidCoordinates(lat, lng))
+      return sendError(res, 'Valid location required', 400);
 
-    const boundsWhere = buildRadiusWhere(parseFloat(lat), parseFloat(lng), parseInt(radius));
-    const distanceLiteral = buildDistanceLiteral(lat, lng);
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
-    const where = { ...boundsWhere, status: 'open' };
-    if (category) where.categoryId = category;
+    // CHANGED: buildRadiusWhere (PostGIS bounding box) → buildNearQuery (MongoDB $near)
+    const filter = {
+      status: 'open',
+      location: buildNearQuery(parseFloat(lat), parseFloat(lng), parseInt(radius)),
+    };
+    if (category) filter.categoryId = category;
 
-    const jobs = await JobPost.findAll({
-      where,
-      include: [
-        { model: Employer, as: 'employer', include: [{ model: User, as: 'user', attributes: ['name', 'profilePhoto', 'isVerified'] }] },
-        { model: Category, as: 'category' },
-      ],
-      order: [['isUrgent', 'DESC'], [distanceLiteral, 'ASC']],
-      attributes: { include: [[distanceLiteral, 'distance']] },
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-    });
+    const jobs = await JobPost.find(filter)
+      .limit(limitNum)
+      .skip((pageNum - 1) * limitNum)
+      .populate({ path: 'employerId', populate: { path: 'userId', select: 'name profilePhoto isVerified' } })
+      .populate('categoryId')
+      .lean();
 
-    return sendSuccess(res, 'Nearby jobs fetched', jobs, 200, jobs.length);
+    // ADDED: annotate with distance (replaces SQL distanceLiteral column)
+    const annotated = annotateWithDistance(jobs, parseFloat(lat), parseFloat(lng));
+
+    return sendSuccess(res, 'Nearby jobs fetched', annotated, 200, annotated.length);
   } catch (error) {
     logger.error('getNearbyJobs error:', error);
     return sendError(res, 'Failed to fetch nearby jobs', 500);
   }
 };
 
-/**
- * @desc    Create a new job post
- * @route   POST /api/jobs
- * @access  Protected (employer)
- */
+// ── CREATE JOB ────────────────────────────────────────────────
+
 const createJob = async (req, res) => {
   try {
-    const employer = await Employer.findOne({ where: { userId: req.user.id } });
+    // CHANGED: Employer.findOne({ where: { userId } }) → Employer.findOne({ userId })
+    const employer = await Employer.findOne({ userId: req.user._id });
     if (!employer) return sendError(res, 'Employer profile not found', 404);
 
-    const job = await JobPost.create({ ...req.body, employerId: employer.id });
+    // Build GeoJSON location if coordinates provided (ADDED for $near queries)
+    const geoLocation = buildGeoPoint(req.body.latitude, req.body.longitude);
 
-    // Increment employer's post count
-    await Employer.increment('totalPosts', { where: { id: employer.id } });
+    const job = await JobPost.create({
+      ...req.body,
+      categoryId: req.body.categoryId,
+      employerId: employer._id,
+      location: geoLocation,
+    });
 
-    // If urgent, send push to all nearby available workers
+    // CHANGED: Employer.increment('totalPosts') → Employer.findByIdAndUpdate($inc)
+    await Employer.findByIdAndUpdate(employer._id, { $inc: { totalPosts: 1 } });
+
+    // If urgent, push notify nearby available workers
     if (req.body.isUrgent && req.body.latitude && req.body.longitude) {
-      const nearbyWorkers = await Worker.findAll({
-        where: {
-          ...buildRadiusWhere(parseFloat(req.body.latitude), parseFloat(req.body.longitude), 25),
-          isAvailable: true,
-        },
-        include: [{ model: User, as: 'user', attributes: ['fcmToken', 'language'] }],
-      });
+      // CHANGED: Worker.findAll({ where: { buildRadiusWhere, isAvailable } })
+      //       → Worker.find({ location: $near, isAvailable })
+      const nearbyWorkers = await Worker.find({
+        isAvailable: true,
+        location: buildNearQuery(parseFloat(req.body.latitude), parseFloat(req.body.longitude), 25),
+      })
+        .populate({ path: 'userId', select: 'fcmToken language' })
+        .lean();
 
-      const tokens = nearbyWorkers
-        .map(w => w.user?.fcmToken)
-        .filter(Boolean);
+      const tokens = nearbyWorkers.map((w) => w.userId?.fcmToken).filter(Boolean);
 
       if (tokens.length > 0) {
         sendMulticastPush(
           tokens,
           '🚨 तातडीचे काम उपलब्ध!',
           `${req.body.title} — ₹${req.body.dailyRate}/दिवस`,
-          { jobId: String(job.id), screen: 'JobDetail', isUrgent: 'true' }
+          { jobId: String(job._id), screen: 'JobDetail', isUrgent: 'true' }
         ).catch(() => {});
       }
     }
 
-    const fullJob = await JobPost.findByPk(job.id, { include: ['employer', 'category'] });
+    // CHANGED: JobPost.findByPk(id, { include }) → JobPost.findById().populate()
+    const fullJob = await JobPost.findById(job._id)
+      .populate({ path: 'employerId', populate: { path: 'userId', select: 'name profilePhoto' } })
+      .populate('categoryId');
+
     return sendSuccess(res, 'Job posted successfully!', fullJob, 201);
   } catch (error) {
     logger.error('createJob error:', error);
@@ -135,24 +150,19 @@ const createJob = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single job with details and applicants
- * @route   GET /api/jobs/:id
- * @access  Public
- */
+// ── GET JOB BY ID ─────────────────────────────────────────────
+
 const getJobById = async (req, res) => {
   try {
-    const job = await JobPost.findByPk(req.params.id, {
-      include: [
-        { model: Employer, as: 'employer', include: [{ model: User, as: 'user', attributes: ['name', 'profilePhoto', 'isVerified'] }] },
-        { model: Category, as: 'category' },
-      ],
-    });
+    // CHANGED: JobPost.findByPk() → JobPost.findById()
+    const job = await JobPost.findById(req.params.id)
+      .populate({ path: 'employerId', populate: { path: 'userId', select: 'name profilePhoto isVerified' } })
+      .populate('categoryId');
 
     if (!job) return sendError(res, 'Job not found', 404);
 
-    // Increment view count
-    await job.increment('viewsCount');
+    // CHANGED: job.increment('viewsCount') → JobPost.findByIdAndUpdate($inc)
+    await JobPost.findByIdAndUpdate(job._id, { $inc: { viewsCount: 1 } });
 
     return sendSuccess(res, 'Job fetched', job);
   } catch (error) {
@@ -161,27 +171,29 @@ const getJobById = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update job post
- * @route   PUT /api/jobs/:id
- * @access  Protected (employer, own job)
- */
+// ── UPDATE JOB ────────────────────────────────────────────────
+
 const updateJob = async (req, res) => {
   try {
-    const job = await JobPost.findByPk(req.params.id, { include: ['employer'] });
+    const job = await JobPost.findById(req.params.id).populate('employerId');
     if (!job) return sendError(res, 'Job not found', 404);
-    if (job.employer.userId !== req.user.id && req.user.role !== 'admin') {
+
+    // CHANGED: job.employer.userId !== req.user.id → .toString() comparison
+    if (job.employerId.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return sendError(res, 'Not authorized', 403);
     }
     if (['filled', 'completed', 'cancelled'].includes(job.status)) {
       return sendError(res, `Cannot update job with status: ${job.status}`, 400);
     }
 
-    const allowedFields = ['title', 'description', 'workersNeeded', 'dailyRate', 'jobDate', 'endDate', 'durationDays', 'address', 'isUrgent', 'requirements'];
-    const updates = {};
-    allowedFields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+    const allowedFields = [
+      'title', 'description', 'workersNeeded', 'dailyRate',
+      'jobDate', 'endDate', 'durationDays', 'address', 'isUrgent', 'requirements',
+    ];
+    allowedFields.forEach((f) => { if (req.body[f] !== undefined) job[f] = req.body[f]; });
 
-    await job.update(updates);
+    // CHANGED: job.update(updates) → job.save()
+    await job.save();
     return sendSuccess(res, 'Job updated', job);
   } catch (error) {
     logger.error('updateJob error:', error);
@@ -189,33 +201,23 @@ const updateJob = async (req, res) => {
   }
 };
 
-/**
- * @desc    Cancel/delete a job post
- * @route   DELETE /api/jobs/:id
- * @access  Protected (employer)
- */
+// ── CANCEL JOB ────────────────────────────────────────────────
+
 const cancelJob = async (req, res) => {
   try {
-    const job = await JobPost.findByPk(req.params.id, { include: ['employer'] });
+    const job = await JobPost.findById(req.params.id).populate('employerId');
     if (!job) return sendError(res, 'Job not found', 404);
-    if (job.employer.userId !== req.user.id && req.user.role !== 'admin') return sendError(res, 'Not authorized', 403);
+    if (job.employerId.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin')
+      return sendError(res, 'Not authorized', 403);
 
-    await job.update({ status: 'cancelled' });
+    // CHANGED: job.update({ status }) → job.save()
+    job.status = 'cancelled';
+    await job.save();
     return sendSuccess(res, 'Job cancelled successfully');
   } catch (error) {
     logger.error('cancelJob error:', error);
     return sendError(res, 'Failed to cancel job', 500);
   }
 };
-
-module.exports = { getAllJobs, getNearbyJobs, createJob, getJobById, updateJob, cancelJob };
-
-
-/**
- * ================================================================
- * controllers/paymentController.js — Razorpay Payment Controller
- * Author: Digital Kaam Naka Dev Team
- * ================================================================
- */
 
 module.exports = { getAllJobs, getNearbyJobs, createJob, getJobById, updateJob, cancelJob };

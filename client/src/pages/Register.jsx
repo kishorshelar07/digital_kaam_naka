@@ -13,18 +13,16 @@ const MAHARASHTRA_DISTRICTS = [
   'Osmanabad','Palghar','Parbhani','Pune','Raigad','Ratnagiri','Sangli',
   'Satara','Sindhudurg','Solapur','Thane','Wardha','Washim','Yavatmal'
 ];
-
 const SKILL_LEVELS = [
-  { value: 'beginner',    label: 'नवशिके',   emoji: '🌱' },
-  { value: 'experienced', label: 'अनुभवी',   emoji: '⚡' },
-  { value: 'expert',      label: 'तज्ञ',      emoji: '🏆' },
+  { value: 'beginner', label: 'नवशिके', emoji: '🌱' },
+  { value: 'experienced', label: 'अनुभवी', emoji: '⚡' },
+  { value: 'expert', label: 'तज्ञ', emoji: '🏆' },
 ];
-
 const EMPLOYER_TYPES = [
-  { value: 'individual', label: 'व्यक्ती',    emoji: '👤' },
+  { value: 'individual', label: 'व्यक्ती', emoji: '👤' },
   { value: 'contractor', label: 'कंत्राटदार', emoji: '🏗️' },
-  { value: 'farmer',     label: 'शेतकरी',     emoji: '🌾' },
-  { value: 'business',   label: 'व्यवसाय',    emoji: '🏢' },
+  { value: 'farmer', label: 'शेतकरी', emoji: '🌾' },
+  { value: 'business', label: 'व्यवसाय', emoji: '🏢' },
 ];
 
 const Register = () => {
@@ -35,13 +33,13 @@ const Register = () => {
   const role = searchParams.get('role') || 'worker';
   const lang = i18n.language;
 
-  const [step, setStep]           = useState(1);
-  const [loading, setLoading]     = useState(false);
+  const [step, setStep]             = useState(1);
+  const [loading, setLoading]       = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
-  const [errors, setErrors]       = useState({});
+  const [errors, setErrors]         = useState({});
 
   const [form, setForm] = useState({
     name: '', language: lang,
@@ -66,13 +64,8 @@ const Register = () => {
     if (!navigator.geolocation) { toast.error('GPS support नाही'); return; }
     setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        set('latitude', pos.coords.latitude);
-        set('longitude', pos.coords.longitude);
-        toast.success('📍 Location मिळाली!');
-        setGpsLoading(false);
-      },
-      () => { toast.warning('Location नाकारली — manually जिल्हा निवडा'); setGpsLoading(false); },
+      (pos) => { set('latitude', pos.coords.latitude); set('longitude', pos.coords.longitude); toast.success('📍 Location मिळाली!'); setGpsLoading(false); },
+      () => { toast.warning('Location नाकारली'); setGpsLoading(false); },
       { enableHighAccuracy: true, timeout: 8000 }
     );
   };
@@ -85,6 +78,7 @@ const Register = () => {
     setPhotoPreview(URL.createObjectURL(file));
   };
 
+  // CHANGED: cat.id → cat._id
   const toggleSkill = (catId) => {
     setForm(prev => {
       const exists = prev.skills.find(s => s.categoryId === catId);
@@ -147,214 +141,78 @@ const Register = () => {
   return (
     <div style={{ minHeight: '80vh', padding: '24px 16px' }}>
       <div style={{ maxWidth: 520, margin: '0 auto' }}>
-
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: 48 }}>{role === 'worker' ? '👷' : '🏢'}</div>
-          <h1 style={{ fontSize: 20, marginTop: 8 }}>
-            {role === 'worker' ? 'कामगार profile' : 'मालक profile'}
-          </h1>
+          <h1 style={{ fontSize: 20, marginTop: 8 }}>{role === 'worker' ? 'कामगार profile' : 'मालक profile'}</h1>
         </div>
 
-        {/* Steps */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, gap: 0 }}>
           {stepLabels.map((label, i) => (
             <React.Fragment key={i}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div style={{
-                  width: 34, height: 34, borderRadius: '50%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700, fontSize: 13,
+                <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13,
                   background: step > i+1 ? '#22c55e' : step === i+1 ? 'var(--color-primary)' : 'var(--color-border)',
-                  color: step >= i+1 ? 'white' : 'var(--color-text-muted)',
-                }}>
-                  {step > i+1 ? '✓' : i+1}
-                </div>
-                <div style={{ fontSize: 11, color: step === i+1 ? 'var(--color-primary)' : 'var(--color-text-muted)', fontWeight: step === i+1 ? 700 : 400 }}>
-                  {label}
-                </div>
+                  color: step >= i+1 ? 'white' : 'var(--color-text-muted)' }}>{step > i+1 ? '✓' : i+1}</div>
+                <div style={{ fontSize: 11, color: step === i+1 ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>{label}</div>
               </div>
-              {i < stepLabels.length - 1 && (
-                <div style={{ height: 2, width: 44, background: step > i+1 ? '#22c55e' : 'var(--color-border)', margin: '0 4px', marginBottom: 18 }} />
-              )}
+              {i < stepLabels.length - 1 && <div style={{ height: 2, width: 44, background: step > i+1 ? '#22c55e' : 'var(--color-border)', margin: '0 4px', marginBottom: 18 }} />}
             </React.Fragment>
           ))}
         </div>
 
-        {/* STEP 1 — माहिती */}
         {step === 1 && (
           <div className="card card-body fade-in">
             <h2 style={{ fontSize: 16, marginBottom: 20 }}>📝 मूलभूत माहिती</h2>
-
-            {/* Photo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, padding: 14, background: 'var(--color-bg)', borderRadius: 10 }}>
-              <div style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}
-                onClick={() => document.getElementById('photoInput').click()}>
-                <img src={photoPreview || `https://ui-avatars.com/api/?name=${form.name||'U'}&background=F97316&color=fff&size=72`}
-                  alt="" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-border)' }} />
-                <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%',
-                  background: 'var(--color-primary)', color: 'white', fontSize: 12,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>📷</div>
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>Profile Photo (ऐच्छिक)</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>JPG/PNG, max 5MB</div>
-                <button type="button" className="btn btn-light btn-sm" style={{ marginTop: 6, fontSize: 11 }}
-                  onClick={() => document.getElementById('photoInput').click()}>फोटो निवडा</button>
-              </div>
-              <input id="photoInput" type="file" accept="image/*" onChange={handlePhoto} style={{ display: 'none' }} />
-            </div>
-
             <div className="form-group">
               <label className="form-label">पूर्ण नाव *</label>
               <input type="text" className={`form-control ${errors.name ? 'is-invalid' : ''}`}
-                placeholder="तुमचे पूर्ण नाव" value={form.name}
-                onChange={e => set('name', e.target.value)} autoFocus />
+                placeholder="तुमचे पूर्ण नाव" value={form.name} onChange={e => set('name', e.target.value)} autoFocus />
               {errors.name && <div style={{ color: 'var(--color-danger)', fontSize: 12, marginTop: 4 }}>{errors.name}</div>}
             </div>
-
-            <div className="form-group">
-              <label className="form-label">भाषा</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {[{code:'mr',label:'मराठी'},{code:'hi',label:'हिंदी'},{code:'en',label:'English'}].map(l => (
-                  <button key={l.code} type="button" onClick={() => set('language', l.code)}
-                    style={{ flex: 1, padding: '10px 4px', border: '2px solid', borderRadius: 8, cursor: 'pointer',
-                      fontFamily: 'var(--font-family)', fontSize: 13, fontWeight: 600,
-                      borderColor: form.language === l.code ? 'var(--color-primary)' : 'var(--color-border)',
-                      background: form.language === l.code ? 'var(--color-primary-light)' : 'white',
-                      color: form.language === l.code ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    }}>{l.label}</button>
-                ))}
-              </div>
-            </div>
-
-            {role === 'worker' && (<>
+            {role === 'worker' && (
               <div className="form-group">
                 <label className="form-label">रोज किती पैसे घेता? (₹/दिवस) *</label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: 16 }}>₹</span>
-                  <input type="number" className={`form-control ${errors.dailyRate ? 'is-invalid' : ''}`}
-                    placeholder="500" value={form.dailyRate}
-                    onChange={e => set('dailyRate', e.target.value)}
-                    style={{ paddingLeft: 28 }} min="100" max="50000" />
-                </div>
+                <input type="number" className={`form-control ${errors.dailyRate ? 'is-invalid' : ''}`}
+                  placeholder="500" value={form.dailyRate} onChange={e => set('dailyRate', e.target.value)} min="100" />
                 {errors.dailyRate && <div style={{ color: 'var(--color-danger)', fontSize: 12, marginTop: 4 }}>{errors.dailyRate}</div>}
-                {form.dailyRate && parseFloat(form.dailyRate) >= 100 && (
-                  <div style={{ fontSize: 12, color: 'var(--color-success)', marginTop: 4 }}>
-                    💡 महिन्याचे: ~₹{(parseFloat(form.dailyRate) * 25).toLocaleString()}
-                  </div>
-                )}
               </div>
-
-              <div className="form-group">
-                <label className="form-label">अनुभव (वर्षे)</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button type="button" onClick={() => set('experienceYrs', Math.max(0, form.experienceYrs - 1))}
-                    className="btn btn-light" style={{ width: 42, height: 42, padding: 0, fontSize: 20 }}>−</button>
-                  <span style={{ fontSize: 22, fontWeight: 800, minWidth: 80, textAlign: 'center', color: 'var(--color-primary)' }}>
-                    {form.experienceYrs} वर्षे
-                  </span>
-                  <button type="button" onClick={() => set('experienceYrs', Math.min(50, form.experienceYrs + 1))}
-                    className="btn btn-primary" style={{ width: 42, height: 42, padding: 0, fontSize: 20 }}>+</button>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">माझ्याबद्दल (ऐच्छिक)</label>
-                <textarea className="form-control" placeholder="तुमच्या कामाबद्दल थोडे सांगा..."
-                  value={form.bio} onChange={e => set('bio', e.target.value)}
-                  rows={2} maxLength={300} style={{ resize: 'vertical' }} />
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'right', marginTop: 2 }}>{form.bio.length}/300</div>
-              </div>
-            </>)}
-
-            {role === 'employer' && (<>
-              <div className="form-group">
-                <label className="form-label">तुम्ही कोण आहात? *</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {EMPLOYER_TYPES.map(opt => (
-                    <button key={opt.value} type="button" onClick={() => set('employerType', opt.value)}
-                      style={{ padding: '12px 6px', border: '2px solid', borderRadius: 10, cursor: 'pointer',
-                        fontFamily: 'var(--font-family)', fontSize: 13, fontWeight: 600,
-                        borderColor: form.employerType === opt.value ? 'var(--color-primary)' : 'var(--color-border)',
-                        background: form.employerType === opt.value ? 'var(--color-primary-light)' : 'white',
-                        color: form.employerType === opt.value ? 'var(--color-primary)' : 'var(--color-text)',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 24 }}>{opt.emoji}</span>{opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            )}
+            {role === 'employer' && (
               <div className="form-group">
                 <label className="form-label">कंपनी/संस्थेचे नाव (ऐच्छिक)</label>
                 <input type="text" className="form-control" placeholder="उदा. ABC Construction"
                   value={form.companyName} onChange={e => set('companyName', e.target.value)} />
               </div>
-            </>)}
-
-            <button type="button" className="btn btn-primary btn-block btn-lg" onClick={goNext}>
-              पुढे →
-            </button>
+            )}
+            <button type="button" className="btn btn-primary btn-block btn-lg" onClick={goNext}>पुढे →</button>
           </div>
         )}
 
-        {/* STEP 2 — पत्ता */}
         {step === 2 && (
           <div className="card card-body fade-in">
             <h2 style={{ fontSize: 16, marginBottom: 20 }}>📍 तुमचे ठिकाण</h2>
-
-            {/* GPS Button */}
             <button type="button" onClick={detectGPS} disabled={gpsLoading}
-              style={{ width: '100%', padding: '14px 16px', border: '2px solid', borderRadius: 12, cursor: 'pointer',
-                fontFamily: 'var(--font-family)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12,
-                borderColor: form.latitude ? '#22c55e' : 'var(--color-primary)',
-                background: form.latitude ? '#f0fdf4' : 'var(--color-primary-light)',
-              }}>
-              <span style={{ fontSize: 28, flexShrink: 0 }}>{gpsLoading ? '⏳' : form.latitude ? '✅' : '📍'}</span>
-              <div style={{ textAlign: 'left', flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: form.latitude ? '#16a34a' : 'var(--color-primary)' }}>
-                  {form.latitude ? 'GPS Location मिळाली!' : 'GPS ने Location detect करा'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                  {form.latitude
-                    ? `${parseFloat(form.latitude).toFixed(4)}, ${parseFloat(form.longitude).toFixed(4)}`
-                    : 'Employers तुम्हाला जवळचे workers मध्ये पाहतील'}
-                </div>
+              style={{ width: '100%', padding: '14px 16px', border: '2px solid', borderRadius: 12, cursor: 'pointer', fontFamily: 'var(--font-family)', marginBottom: 20,
+                borderColor: form.latitude ? '#22c55e' : 'var(--color-primary)', background: form.latitude ? '#f0fdf4' : 'var(--color-primary-light)' }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: form.latitude ? '#16a34a' : 'var(--color-primary)' }}>
+                {form.latitude ? '✅ GPS Location मिळाली!' : '📍 GPS ने Location detect करा'}
               </div>
-              {!form.latitude && (
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
-                  {gpsLoading ? 'मिळवत आहे...' : '→ Detect'}
-                </span>
-              )}
             </button>
-
-            {/* District Dropdown */}
             <div className="form-group">
-              <label className="form-label">जिल्हा * <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400 }}>(Maharashtra)</span></label>
+              <label className="form-label">जिल्हा *</label>
               <select className={`form-control ${errors.district ? 'is-invalid' : ''}`}
-                value={form.district} onChange={e => set('district', e.target.value)}
-                style={{ fontSize: 15 }}>
+                value={form.district} onChange={e => set('district', e.target.value)}>
                 <option value="">जिल्हा निवडा...</option>
                 {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
               {errors.district && <div style={{ color: 'var(--color-danger)', fontSize: 12, marginTop: 4 }}>{errors.district}</div>}
             </div>
-
             <div className="form-group">
               <label className="form-label">शहर / गाव *</label>
               <input type="text" className={`form-control ${errors.city ? 'is-invalid' : ''}`}
-                placeholder="उदा. पुणे, नाशिक, सातारा..." value={form.city}
-                onChange={e => set('city', e.target.value)} />
+                placeholder="उदा. पुणे, नाशिक..." value={form.city} onChange={e => set('city', e.target.value)} />
               {errors.city && <div style={{ color: 'var(--color-danger)', fontSize: 12, marginTop: 4 }}>{errors.city}</div>}
             </div>
-
-            <div className="form-group">
-              <label className="form-label">Pincode (ऐच्छिक)</label>
-              <input type="text" inputMode="numeric" className="form-control"
-                placeholder="411001" value={form.pincode}
-                onChange={e => set('pincode', e.target.value.replace(/\D/g,'').slice(0,6))} maxLength={6} />
-            </div>
-
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn btn-light" style={{ flex: 1 }} onClick={() => setStep(1)}>← मागे</button>
               <button type="button" className="btn btn-primary" style={{ flex: 2 }} onClick={goNext}>
@@ -364,55 +222,42 @@ const Register = () => {
           </div>
         )}
 
-        {/* STEP 3 — कौशल्ये (Worker only) */}
         {step === 3 && role === 'worker' && (
           <div className="card card-body fade-in">
             <h2 style={{ fontSize: 16, marginBottom: 6 }}>💼 तुमची कौशल्ये</h2>
-            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
-              तुम्ही कोणते काम करता? (एक किंवा जास्त निवडा)
-            </p>
-
-            {errors.skills && (
-              <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
-                ⚠️ {errors.skills}
-              </div>
-            )}
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>एक किंवा जास्त निवडा</p>
+            {errors.skills && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>⚠️ {errors.skills}</div>}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
+              {/* CHANGED: cat.id → cat._id */}
               {categories.map(cat => {
-                const sel = form.skills.some(s => s.categoryId === cat.id);
+                const sel = form.skills.some(s => s.categoryId === cat._id?.toString());
                 return (
-                  <button key={cat.id} type="button" onClick={() => toggleSkill(cat.id)}
+                  <button key={cat._id} type="button" onClick={() => toggleSkill(cat._id?.toString())}
                     style={{ padding: '12px 4px', border: '2px solid', borderRadius: 10, cursor: 'pointer',
                       fontFamily: 'var(--font-family)', fontSize: 11, fontWeight: 600, textAlign: 'center',
                       borderColor: sel ? 'var(--color-primary)' : 'var(--color-border)',
                       background: sel ? 'var(--color-primary-light)' : 'white',
                       color: sel ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-                      position: 'relative', transition: 'all 0.15s',
-                    }}>
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, position: 'relative' }}>
                     <span style={{ fontSize: 24 }}>{cat.iconEmoji || '💼'}</span>
                     {getCatName(cat)}
-                    {sel && (
-                      <span style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18,
-                        borderRadius: '50%', background: 'var(--color-primary)', color: 'white',
-                        fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
-                    )}
+                    {sel && <span style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-primary)', color: 'white', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>}
                   </button>
                 );
               })}
             </div>
 
-            {/* Skill levels for selected */}
             {form.skills.length > 0 && (
               <div style={{ background: 'var(--color-bg)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Level सांगा:</div>
                 {form.skills.map(skill => {
-                  const cat = categories.find(c => c.id === skill.categoryId);
+                  // CHANGED: c.id === skill.categoryId → c._id?.toString() === skill.categoryId
+                  const cat = categories.find(c => c._id?.toString() === skill.categoryId);
                   if (!cat) return null;
                   return (
                     <div key={skill.categoryId} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span style={{ fontSize: 18, flexShrink: 0 }}>{cat.iconEmoji || '💼'}</span>
+                      <span style={{ fontSize: 18 }}>{cat.iconEmoji || '💼'}</span>
                       <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>{getCatName(cat)}</span>
                       <div style={{ display: 'flex', gap: 4 }}>
                         {SKILL_LEVELS.map(l => (
@@ -421,8 +266,9 @@ const Register = () => {
                               fontFamily: 'var(--font-family)', fontSize: 10,
                               borderColor: skill.level === l.value ? 'var(--color-primary)' : 'var(--color-border)',
                               background: skill.level === l.value ? 'var(--color-primary)' : 'white',
-                              color: skill.level === l.value ? 'white' : 'var(--color-text-muted)',
-                            }}>{l.emoji} {l.label}</button>
+                              color: skill.level === l.value ? 'white' : 'var(--color-text-muted)' }}>
+                            {l.emoji} {l.label}
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -433,8 +279,7 @@ const Register = () => {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn btn-light" style={{ flex: 1 }} onClick={() => setStep(2)}>← मागे</button>
-              <button type="button" className="btn btn-primary" style={{ flex: 2 }}
-                onClick={goNext} disabled={loading || form.skills.length === 0}>
+              <button type="button" className="btn btn-primary" style={{ flex: 2 }} onClick={goNext} disabled={loading || form.skills.length === 0}>
                 {loading ? <Loader text="नोंदणी..." /> : '🎉 नोंदणी पूर्ण करा!'}
               </button>
             </div>

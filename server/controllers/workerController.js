@@ -1,30 +1,33 @@
 /**
  * ================================================================
  * controllers/workerController.js — Worker Profile Controller
- * Handles worker search, GPS-based nearby lookup, availability
- * toggle, profile management, earnings, and booking history.
+ * Converted from Sequelize PostgreSQL → Mongoose MongoDB
+ *
+ * KEY CHANGES:
+ *  - Op.gte / Op.lte                  → $gte / $lte
+ *  - Worker.findAndCountAll()          → Worker.find() + Worker.countDocuments()
+ *  - buildRadiusWhere + distanceLiteral → MongoDB $near (2dsphere index)
+ *  - include: [{model: User}]          → .populate('userId')
+ *  - Worker.findByPk()                 → Worker.findById()
+ *  - sequelize.fn('SUM')               → MongoDB $group aggregation pipeline
+ *  - worker.update({})                 → Object.assign(worker, {}) + worker.save()
+ *  - WorkerSkill.destroy({where})      → WorkerSkill.deleteMany({})
+ *  - WorkerSkill.bulkCreate([])        → WorkerSkill.insertMany([])
+ *  - Availability.upsert({})           → Availability.findOneAndUpdate({},{},{upsert:true})
  * Author: Digital Kaam Naka Dev Team
  * ================================================================
  */
 
-const { Op } = require('sequelize');
-const { sequelize } = require('../config/db');
 const {
   User, Worker, Employer, WorkerSkill, Category, Availability, Booking, JobPost, Payment, Rating
 } = require('../models');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/responseHelper');
-const { buildRadiusWhere, buildDistanceLiteral, isValidCoordinates } = require('../utils/gpsHelper');
+const { buildNearQuery, buildGeoPoint, annotateWithDistance, isValidCoordinates } = require('../utils/gpsHelper');
 const { uploadToCloudinary } = require('../config/cloudinary');
 const logger = require('../utils/logger');
 
 // ── GET ALL WORKERS (with filters) ───────────────────────────
 
-/**
- * @desc    Get all workers with optional filters
- * @route   GET /api/workers
- * @access  Public
- * @query   category, minRate, maxRate, minRating, district, isAvailable, page, limit, sort
- */
 const getAllWorkers = async (req, res) => {
   try {
     const {
@@ -32,41 +35,70 @@ const getAllWorkers = async (req, res) => {
       isAvailable, page = 1, limit = 12, sort = 'rating',
     } = req.query;
 
-    const where = {};
-    if (district) where.district = district;
-    if (city) where.city = city;
-    if (minRate) where.dailyRate = { ...where.dailyRate, [Op.gte]: parseFloat(minRate) };
-    if (maxRate) where.dailyRate = { ...where.dailyRate, [Op.lte]: parseFloat(maxRate) };
-    if (minRating) where.avgRating = { [Op.gte]: parseFloat(minRating) };
-    if (isAvailable === 'true') where.isAvailable = true;
+    // CHANGED: Sequelize where + Op → plain MongoDB filter object
+    const filter = {};
+    if (district) filter.district = district;
+    if (city) filter.city = city;
+    if (minRate || maxRate) {
+      filter.dailyRate = {};
+      if (minRate) filter.dailyRate.$gte = parseFloat(minRate); // CHANGED: Op.gte → $gte
+      if (maxRate) filter.dailyRate.$lte = parseFloat(maxRate); // CHANGED: Op.lte → $lte
+    }
+    if (minRating) filter.avgRating = { $gte: parseFloat(minRating) };
+    if (isAvailable === 'true') filter.isAvailable = true;
 
-    // Sort options
-    const orderMap = {
-      rating: [['avgRating', 'DESC']],
-      rate_asc: [['dailyRate', 'ASC']],
-      rate_desc: [['dailyRate', 'DESC']],
-      jobs: [['totalJobs', 'DESC']],
-      newest: [['createdAt', 'DESC']],
+    // CHANGED: category join via include → filter WorkerSkill, get workerIds
+    if (category) {
+      const skillDocs = await WorkerSkill.find({ categoryId: category }).select('workerId');
+      const workerIds = skillDocs.map((s) => s.workerId);
+      filter._id = { $in: workerIds };
+    }
+
+    // CHANGED: Sequelize order arrays → Mongoose sort object
+    const sortMap = {
+      rating: { avgRating: -1 },
+      rate_asc: { dailyRate: 1 },
+      rate_desc: { dailyRate: -1 },
+      jobs: { totalJobs: -1 },
+      newest: { createdAt: -1 },
     };
-    const order = orderMap[sort] || orderMap.rating;
+    const sortObj = sortMap[sort] || sortMap.rating;
 
-    const includeCategory = category
-      ? [{ model: WorkerSkill, as: 'skills', where: { categoryId: category }, include: [{ model: Category, as: 'category' }] }]
-      : [{ model: WorkerSkill, as: 'skills', include: [{ model: Category, as: 'category' }], required: false }];
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
 
-    const { count, rows } = await Worker.findAndCountAll({
-      where,
-      include: [
-        { model: User, as: 'user', attributes: ['name', 'profilePhoto', 'isVerified', 'phone'] },
-        ...includeCategory,
-      ],
-      order,
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-      distinct: true,
+    // CHANGED: Worker.findAndCountAll() → Worker.find() + Worker.countDocuments()
+    const [workers, count] = await Promise.all([
+      Worker.find(filter)
+        .sort(sortObj)
+        .limit(limitNum)
+        .skip(skip)
+        // CHANGED: include: [User] → .populate('userId')
+        .populate({ path: 'userId', select: 'name profilePhoto isVerified phone' })
+        .lean(),
+      Worker.countDocuments(filter),
+    ]);
+
+    // Attach skills (replaces include WorkerSkill)
+    const workerIds = workers.map((w) => w._id);
+    const allSkills = await WorkerSkill.find({ workerId: { $in: workerIds } })
+      .populate({ path: 'categoryId', model: 'Category' })
+      .lean();
+
+    const skillsByWorker = {};
+    allSkills.forEach((s) => {
+      const wId = s.workerId.toString();
+      if (!skillsByWorker[wId]) skillsByWorker[wId] = [];
+      skillsByWorker[wId].push(s);
     });
 
-    return sendPaginated(res, 'Workers fetched successfully', rows, count, page, limit);
+    const result = workers.map((w) => ({
+      ...w,
+      skills: skillsByWorker[w._id.toString()] || [],
+    }));
+
+    return sendPaginated(res, 'Workers fetched successfully', result, count, pageNum, limitNum);
   } catch (error) {
     logger.error('getAllWorkers error:', error);
     return sendError(res, 'Failed to fetch workers', 500, error.message);
@@ -75,12 +107,6 @@ const getAllWorkers = async (req, res) => {
 
 // ── GET NEARBY WORKERS (GPS) ──────────────────────────────────
 
-/**
- * @desc    Find available workers near a GPS location
- * @route   GET /api/workers/nearby
- * @access  Public
- * @query   lat, lng, radius (km), category, page, limit
- */
 const getNearbyWorkers = async (req, res) => {
   try {
     const { lat, lng, radius = 20, category, page = 1, limit = 20 } = req.query;
@@ -89,46 +115,34 @@ const getNearbyWorkers = async (req, res) => {
       return sendError(res, 'Valid latitude and longitude are required', 400);
     }
 
-    const radiusKm = Math.min(parseInt(radius) || 20, 100); // Cap at 100km
+    const radiusKm = Math.min(parseInt(radius) || 20, 100);
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
-    // Bounding box filter (fast, uses index)
-    const boundsWhere = buildRadiusWhere(parseFloat(lat), parseFloat(lng), radiusKm);
-
-    // Distance expression for ordering
-    const distanceLiteral = buildDistanceLiteral(lat, lng);
-
-    const workerWhere = {
-      ...boundsWhere,
-      isAvailable: true, // Only available workers
+    // CHANGED: buildRadiusWhere (PostGIS bounding box) → MongoDB $near (2dsphere)
+    // $near automatically returns results sorted by distance (closest first)
+    const filter = {
+      isAvailable: true,
+      location: buildNearQuery(parseFloat(lat), parseFloat(lng), radiusKm),
     };
 
-    const skillInclude = category
-      ? [{ model: WorkerSkill, as: 'skills', where: { categoryId: category }, include: ['category'] }]
-      : [{ model: WorkerSkill, as: 'skills', include: ['category'], required: false }];
+    if (category) {
+      const skillDocs = await WorkerSkill.find({ categoryId: category }).select('workerId');
+      filter._id = { $in: skillDocs.map((s) => s.workerId) };
+    }
 
-    const workers = await Worker.findAll({
-      where: workerWhere,
-      include: [
-        { model: User, as: 'user', attributes: ['name', 'profilePhoto', 'isVerified'] },
-        ...skillInclude,
-      ],
-      // Order by distance (closest first)
-      order: [[distanceLiteral, 'ASC']],
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-      // Include computed distance in results
-      attributes: {
-        include: [[distanceLiteral, 'distance']],
-      },
-    });
+    // CHANGED: Worker.findAll() with distanceLiteral order → Worker.find() with $near
+    // $near already sorts by distance, no extra ORDER BY needed
+    const workers = await Worker.find(filter)
+      .limit(limitNum)
+      .skip((pageNum - 1) * limitNum)
+      .populate({ path: 'userId', select: 'name profilePhoto isVerified' })
+      .lean();
 
-    // Filter to exact radius (bounding box may include slightly outside)
-    const filtered = workers.filter((w) => {
-      const d = parseFloat(w.getDataValue('distance'));
-      return !isNaN(d) && d <= radiusKm;
-    });
+    // ADDED: annotate each result with calculated distance (replaces distanceLiteral column)
+    const annotated = annotateWithDistance(workers, parseFloat(lat), parseFloat(lng));
 
-    return sendSuccess(res, `${filtered.length} workers found nearby`, filtered, 200, filtered.length);
+    return sendSuccess(res, `${annotated.length} workers found nearby`, annotated, 200, annotated.length);
   } catch (error) {
     logger.error('getNearbyWorkers error:', error);
     return sendError(res, 'Failed to find nearby workers', 500, error.message);
@@ -137,25 +151,22 @@ const getNearbyWorkers = async (req, res) => {
 
 // ── GET SINGLE WORKER PROFILE ─────────────────────────────────
 
-/**
- * @desc    Get a single worker's full profile
- * @route   GET /api/workers/:id
- * @access  Public
- */
 const getWorkerById = async (req, res) => {
   try {
-    const worker = await Worker.findByPk(req.params.id, {
-      include: [
-        { model: User, as: 'user', attributes: ['name', 'profilePhoto', 'isVerified', 'createdAt', 'phone'] },
-        {
-          model: WorkerSkill, as: 'skills', required: false,
-          include: [{ model: Category, as: 'category', required: false }],
-        },
-      ],
-    });
+    // CHANGED: Worker.findByPk(id, { include: [...] })
+    //       → Worker.findById(id).populate()
+    const worker = await Worker.findById(req.params.id)
+      .populate({ path: 'userId', select: 'name profilePhoto isVerified createdAt phone' })
+      .lean();
 
     if (!worker) return sendError(res, 'Worker not found', 404);
-    return sendSuccess(res, 'Worker profile fetched', worker);
+
+    // Attach skills
+    const skills = await WorkerSkill.find({ workerId: worker._id })
+      .populate({ path: 'categoryId', model: 'Category' })
+      .lean();
+
+    return sendSuccess(res, 'Worker profile fetched', { ...worker, skills });
   } catch (error) {
     logger.error('getWorkerById error:', error.message);
     return sendError(res, 'Failed to fetch worker: ' + error.message, 500);
@@ -164,63 +175,72 @@ const getWorkerById = async (req, res) => {
 
 // ── UPDATE WORKER PROFILE ─────────────────────────────────────
 
-/**
- * @desc    Update worker's own profile
- * @route   PUT /api/workers/:id
- * @access  Protected (worker only, own profile)
- */
 const updateWorker = async (req, res) => {
   try {
-    const worker = await Worker.findByPk(req.params.id);
+    // CHANGED: Worker.findByPk() → Worker.findById()
+    const worker = await Worker.findById(req.params.id);
     if (!worker) return sendError(res, 'Worker not found', 404);
 
-    // Ensure worker can only update their own profile
-    if (worker.userId !== req.user.id && req.user.role !== 'admin') {
+    // CHANGED: worker.userId !== req.user.id → .toString() comparison
+    if (worker.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return sendError(res, 'Not authorized to update this profile', 403);
     }
 
     const allowedFields = [
-      'dailyRate', 'experienceYrs', 'bio', 'city', 'district', 'state',
-      'pincode', 'address', 'latitude', 'longitude',
+      'dailyRate', 'experienceYrs', 'bio', 'city', 'district',
+      'state', 'pincode', 'address', 'latitude', 'longitude',
     ];
 
-    const updates = {};
     allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
+      if (req.body[field] !== undefined) worker[field] = req.body[field];
     });
 
-    // Handle profile photo upload
-    if (req.file) {
-      const photoUrl = await uploadToCloudinary(req.file.buffer, 'profiles', `user_${req.user.id}`);
-      await User.update({ profilePhoto: photoUrl }, { where: { id: req.user.id } });
+    // Rebuild GeoJSON if coordinates changed
+    if (req.body.latitude || req.body.longitude) {
+      worker.location = buildGeoPoint(
+        req.body.latitude || worker.latitude,
+        req.body.longitude || worker.longitude
+      );
     }
 
-    // Handle Aadhar upload
+    if (req.file) {
+      const photoUrl = await uploadToCloudinary(req.file.buffer, 'profiles', `user_${req.user._id}`);
+      // CHANGED: User.update({}, { where: {} }) → User.findByIdAndUpdate()
+      await User.findByIdAndUpdate(req.user._id, { profilePhoto: photoUrl });
+    }
+
     if (req.files?.aadharPhoto) {
       const aadharUrl = await uploadToCloudinary(
-        req.files.aadharPhoto[0].buffer, 'aadhar', `aadhar_${req.user.id}`
+        req.files.aadharPhoto[0].buffer, 'aadhar', `aadhar_${req.user._id}`
       );
-      updates.aadharPhoto = aadharUrl;
+      worker.aadharPhoto = aadharUrl;
     }
 
-    // Update skills if provided
     if (req.body.skills && Array.isArray(req.body.skills)) {
-      await WorkerSkill.destroy({ where: { workerId: worker.id } });
-      const skills = req.body.skills.map((s) => ({
-        workerId: worker.id,
-        categoryId: s.categoryId,
-        level: s.level || 'beginner',
-        yearsInSkill: s.yearsInSkill || 0,
-      }));
-      await WorkerSkill.bulkCreate(skills);
+      // CHANGED: WorkerSkill.destroy({ where: {} }) → WorkerSkill.deleteMany({})
+      await WorkerSkill.deleteMany({ workerId: worker._id });
+      // CHANGED: WorkerSkill.bulkCreate([]) → WorkerSkill.insertMany([])
+      await WorkerSkill.insertMany(
+        req.body.skills.map((s) => ({
+          workerId: worker._id,
+          categoryId: s.categoryId,
+          level: s.level || 'beginner',
+          yearsInSkill: s.yearsInSkill || 0,
+        }))
+      );
     }
 
-    await worker.update(updates);
-    const updated = await Worker.findByPk(worker.id, {
-      include: ['user', { model: WorkerSkill, as: 'skills', include: ['category'] }],
-    });
+    // CHANGED: worker.update({}) → worker.save()
+    await worker.save();
 
-    return sendSuccess(res, 'Profile updated successfully', updated);
+    const updated = await Worker.findById(worker._id)
+      .populate({ path: 'userId', select: 'name profilePhoto isVerified phone' })
+      .lean();
+    const skills = await WorkerSkill.find({ workerId: worker._id })
+      .populate({ path: 'categoryId', model: 'Category' })
+      .lean();
+
+    return sendSuccess(res, 'Profile updated successfully', { ...updated, skills });
   } catch (error) {
     logger.error('updateWorker error:', error);
     return sendError(res, 'Failed to update profile', 500, error.message);
@@ -229,39 +249,43 @@ const updateWorker = async (req, res) => {
 
 // ── SET AVAILABILITY (THE CORE NAKA FEATURE) ─────────────────
 
-/**
- * @desc    Worker toggles availability for today — THE KEY FEATURE
- *          This is the digital equivalent of showing up at the Naka.
- * @route   POST /api/workers/availability
- * @access  Protected (worker only)
- */
 const setAvailability = async (req, res) => {
   try {
-    const worker = await Worker.findOne({ where: { userId: req.user.id } });
+    // CHANGED: Worker.findOne({ where: { userId } }) → Worker.findOne({ userId })
+    const worker = await Worker.findOne({ userId: req.user._id });
     if (!worker) return sendError(res, 'Worker profile not found', 404);
 
     const { isAvailable, date, latitude, longitude, radiusKm = 20 } = req.body;
+    const targetDate = date ? new Date(date) : new Date();
 
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    // Update worker availability + location
+    worker.isAvailable = !!isAvailable;
+    if (latitude && !isNaN(parseFloat(latitude))) {
+      worker.latitude = parseFloat(latitude);
+      worker.longitude = parseFloat(longitude);
+      worker.location = buildGeoPoint(parseFloat(latitude), parseFloat(longitude));
+    }
+    // CHANGED: worker.update({}) → worker.save()
+    await worker.save();
 
-    // Update worker isAvailable + location first
-    const workerUpdates = { isAvailable: !!isAvailable };
-    if (latitude  && !isNaN(parseFloat(latitude)))  workerUpdates.latitude  = parseFloat(latitude);
-    if (longitude && !isNaN(parseFloat(longitude))) workerUpdates.longitude = parseFloat(longitude);
-    await worker.update(workerUpdates);
-
-    // Upsert daily availability record
+    // CHANGED: Availability.upsert({}) → Availability.findOneAndUpdate({},{},{upsert:true})
     try {
-      await Availability.upsert({
-        workerId:    worker.id,
-        date:        targetDate,
-        isAvailable: !!isAvailable,
-        radiusKm:    parseInt(radiusKm) || 20,
-        latitude:    latitude  ? parseFloat(latitude)  : worker.latitude,
-        longitude:   longitude ? parseFloat(longitude) : worker.longitude,
-      });
+      const avLat = latitude ? parseFloat(latitude) : worker.latitude;
+      const avLng = longitude ? parseFloat(longitude) : worker.longitude;
+      await Availability.findOneAndUpdate(
+        { workerId: worker._id, date: targetDate },
+        {
+          workerId: worker._id,
+          date: targetDate,
+          isAvailable: !!isAvailable,
+          radiusKm: parseInt(radiusKm) || 20,
+          latitude: avLat,
+          longitude: avLng,
+          location: buildGeoPoint(avLat, avLng),
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
     } catch (availErr) {
-      // Availability record error — worker status still updated, continue
       logger.warn('Availability record upsert failed (non-critical):', availErr.message);
     }
 
@@ -280,36 +304,40 @@ const setAvailability = async (req, res) => {
 
 // ── GET WORKER BOOKINGS ───────────────────────────────────────
 
-/**
- * @desc    Get worker's booking history with pagination
- * @route   GET /api/workers/:id/bookings
- * @access  Protected
- */
 const getWorkerBookings = async (req, res) => {
   try {
-    const worker = await Worker.findByPk(req.params.id);
+    // CHANGED: Worker.findByPk() → Worker.findById()
+    const worker = await Worker.findById(req.params.id);
     if (!worker) return sendError(res, 'Worker not found', 404);
 
     const { status, page = 1, limit = 10 } = req.query;
-    const where = { workerId: worker.id };
-    if (status) where.status = status;
+    const filter = { workerId: worker._id };
+    if (status) filter.status = status;
 
-    const { count, rows } = await Booking.findAndCountAll({
-      where,
-      include: [
-        { model: Employer, as: 'employer', required: false,
-          include: [{ model: User, as: 'user', attributes: ['name','profilePhoto'], required: false }] },
-        { model: JobPost, as: 'jobPost', required: false,
-          include: [{ model: Category, as: 'category', required: false }] },
-        { model: Payment, as: 'payment', required: false },
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-      distinct: true,
-    });
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
-    return sendPaginated(res, 'Bookings fetched', rows, count, page, limit);
+    // CHANGED: Booking.findAndCountAll() → Booking.find() + Booking.countDocuments()
+    const [bookings, count] = await Promise.all([
+      Booking.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum)
+        // CHANGED: include: [Employer, JobPost, Payment] → .populate()
+        .populate({
+          path: 'employerId',
+          populate: { path: 'userId', select: 'name profilePhoto' },
+        })
+        .populate({
+          path: 'jobPostId',
+          populate: { path: 'categoryId', model: 'Category' },
+        })
+        .populate('paymentId')
+        .lean(),
+      Booking.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 'Bookings fetched', bookings, count, pageNum, limitNum);
   } catch (error) {
     logger.error('getWorkerBookings error:', error);
     return sendError(res, 'Failed to fetch bookings', 500);
@@ -318,75 +346,78 @@ const getWorkerBookings = async (req, res) => {
 
 // ── GET WORKER EARNINGS DASHBOARD ────────────────────────────
 
-/**
- * @desc    Earnings summary: total, monthly, weekly breakdown
- * @route   GET /api/workers/:id/earnings
- * @access  Protected (own data only)
- */
 const getWorkerEarnings = async (req, res) => {
   try {
-    const worker = await Worker.findByPk(req.params.id);
+    // CHANGED: Worker.findByPk() → Worker.findById()
+    const worker = await Worker.findById(req.params.id);
     if (!worker) return sendError(res, 'Worker not found', 404);
 
-    if (worker.userId !== req.user.id && req.user.role !== 'admin') {
+    if (worker.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return sendError(res, 'Not authorized', 403);
     }
 
-    // This month's range
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    // Aggregate payments
-    const [monthlyResult] = await Payment.findAll({
-      where: {
-        workerId: worker.id,
-        status: 'completed',
-        paidAt: { [Op.between]: [monthStart, monthEnd] },
-      },
-      attributes: [
-        [sequelize.fn('SUM', sequelize.col('worker_amount')), 'total'],
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-      ],
-      raw: true,
-    });
-
-    // Total lifetime
-    const [lifetimeResult] = await Payment.findAll({
-      where: { workerId: worker.id, status: 'completed' },
-      attributes: [
-        [sequelize.fn('SUM', sequelize.col('worker_amount')), 'total'],
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-      ],
-      raw: true,
-    });
-
-    // Last 30 days daily breakdown (for chart)
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const dailyBreakdown = await Payment.findAll({
-      where: {
-        workerId: worker.id,
-        status: 'completed',
-        paidAt: { [Op.gte]: thirtyDaysAgo },
+
+    // CHANGED: sequelize.fn('SUM') + findAll({attributes}) → MongoDB $group aggregation pipeline
+    const [monthlyResult] = await Payment.aggregate([
+      {
+        $match: {
+          workerId: worker._id,
+          status: 'completed',
+          paidAt: { $gte: monthStart, $lte: monthEnd },
+        },
       },
-      attributes: [
-        [sequelize.fn('DATE', sequelize.col('paid_at')), 'date'],
-        [sequelize.fn('SUM', sequelize.col('worker_amount')), 'amount'],
-        [sequelize.fn('COUNT', sequelize.col('id')), 'jobs'],
-      ],
-      group: [sequelize.fn('DATE', sequelize.col('paid_at'))],
-      order: [[sequelize.fn('DATE', sequelize.col('paid_at')), 'ASC']],
-      raw: true,
-    });
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$workerAmount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const [lifetimeResult] = await Payment.aggregate([
+      { $match: { workerId: worker._id, status: 'completed' } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$workerAmount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // CHANGED: sequelize.fn('DATE') group → MongoDB $dateToString $group pipeline
+    const dailyBreakdown = await Payment.aggregate([
+      {
+        $match: {
+          workerId: worker._id,
+          status: 'completed',
+          paidAt: { $gte: thirtyDaysAgo },
+        },
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$paidAt' } },
+          amount: { $sum: '$workerAmount' },
+          jobs: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, date: '$_id', amount: 1, jobs: 1 } },
+    ]);
 
     return sendSuccess(res, 'Earnings fetched', {
       thisMonth: {
-        amount: parseFloat(monthlyResult?.total || 0),
-        jobCount: parseInt(monthlyResult?.count || 0),
+        amount: monthlyResult?.total || 0,
+        jobCount: monthlyResult?.count || 0,
       },
       lifetime: {
-        amount: parseFloat(lifetimeResult?.total || 0),
-        jobCount: parseInt(lifetimeResult?.count || 0),
+        amount: lifetimeResult?.total || 0,
+        jobCount: lifetimeResult?.count || 0,
       },
       dailyBreakdown,
       avgRating: worker.avgRating,
@@ -398,29 +429,32 @@ const getWorkerEarnings = async (req, res) => {
   }
 };
 
-// ── GET WORKER REVIEWS ─────────────────────────────────────────
+// ── GET WORKER REVIEWS ────────────────────────────────────────
 
-/**
- * @desc    Get all reviews/ratings for a worker
- * @route   GET /api/workers/:id/reviews
- * @access  Public
- */
 const getWorkerReviews = async (req, res) => {
   try {
-    const worker = await Worker.findByPk(req.params.id);
+    const worker = await Worker.findById(req.params.id);
     if (!worker) return sendError(res, 'Worker not found', 404);
 
     const { page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
-    const { count, rows } = await Rating.findAndCountAll({
-      where: { ratedTo: worker.userId, roleRatedTo: 'worker', isVisible: true },
-      include: [{ model: User, as: 'rater', attributes: ['name', 'profilePhoto'] }],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-    });
+    const filter = { ratedTo: worker.userId, roleRatedTo: 'worker', isVisible: true };
 
-    return sendPaginated(res, 'Reviews fetched', rows, count, page, limit);
+    // CHANGED: Rating.findAndCountAll() → Rating.find() + Rating.countDocuments()
+    const [rows, count] = await Promise.all([
+      Rating.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum)
+        // CHANGED: include: [User as rater] → .populate('ratedBy')
+        .populate({ path: 'ratedBy', select: 'name profilePhoto' })
+        .lean(),
+      Rating.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 'Reviews fetched', rows, count, pageNum, limitNum);
   } catch (error) {
     logger.error('getWorkerReviews error:', error);
     return sendError(res, 'Failed to fetch reviews', 500);
