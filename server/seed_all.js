@@ -269,7 +269,7 @@ const seed = async () => {
   }
   console.log(`✅ ${jobPosts.length} JobPosts`);
 
-  // 10. BOOKINGS (20)
+  // 10. BOOKINGS (20)...
   const bkStatuses = ['pending','accepted','started','completed','completed','completed','cancelled','rejected'];
   const bookings = [];
   for (let i = 0; i < 20; i++) {
