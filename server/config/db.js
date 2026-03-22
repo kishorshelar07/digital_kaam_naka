@@ -60,7 +60,8 @@ const connectDB = async () => {
     } catch (e) {
       logger.warn('PostGIS skip:', e.message);
     }
-
+      await sequelize.sync({ alter: true });
+    logger.info('✅ Database tables synced');
     logger.info('✅ Database ready');
 
   } catch (error) {
