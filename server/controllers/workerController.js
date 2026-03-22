@@ -37,8 +37,8 @@ const getAllWorkers = async (req, res) => {
 
     // CHANGED: Sequelize where + Op → plain MongoDB filter object
     const filter = {};
-    if (district) filter.district = district;
-    if (city) filter.city = city;
+    if (district) filter.district = { $regex: new RegExp('^' + district + '$', 'i') }; // case-insensitive
+    if (city) filter.city = { $regex: new RegExp('^' + city + '$', 'i') }; // case-insensitive
     if (minRate || maxRate) {
       filter.dailyRate = {};
       if (minRate) filter.dailyRate.$gte = parseFloat(minRate); // CHANGED: Op.gte → $gte
@@ -51,6 +51,10 @@ const getAllWorkers = async (req, res) => {
     if (category) {
       const skillDocs = await WorkerSkill.find({ categoryId: category }).select('workerId');
       const workerIds = skillDocs.map((s) => s.workerId);
+      // BUG FIX: if no skills found for this category, return empty (not all workers)
+      if (workerIds.length === 0) {
+        return sendPaginated(res, 'Workers fetched successfully', [], 0, parseInt(page), parseInt(limit));
+      }
       filter._id = { $in: workerIds };
     }
 

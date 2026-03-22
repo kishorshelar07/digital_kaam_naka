@@ -11,7 +11,7 @@ const connectDB = async () => {
   try {
     logger.info('Connecting to MongoDB...');
 
-    const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/kaamnaka_db';
+    const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb+srv://digital_kaam_naka:Kishor1234@cluster0.ikyng6e.mongodb.net/digital_kaam_naka?appName=Cluster0';
 
     await mongoose.connect(mongoUri, {
       // Mongoose 7+ does not need these options, but keeping for clarity...
