@@ -14,7 +14,7 @@ const connectDB = async () => {
     const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/kaamnaka_db';
 
     await mongoose.connect(mongoUri, {
-      // Mongoose 7+ does not need these options, but keeping for clarity
+      // Mongoose 7+ does not need these options, but keeping for clarity...
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
     });
