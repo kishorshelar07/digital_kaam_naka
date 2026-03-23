@@ -50,7 +50,7 @@ const BookingPage = () => {
   const workerUser = worker?.userId || {};
   const workerName = workerUser?.name || 'Worker';
   const lang = i18n.language;
-  const getSkillName = (skill) => ({ mr: skill?.category?.nameMr, hi: skill?.category?.nameHi, en: skill?.category?.nameEn }[lang] || skill?.category?.nameEn);
+  const getSkillName = (skill) => ({ mr: skill?.categoryId?.nameMr, hi: skill?.categoryId?.nameHi, en: skill?.categoryId?.nameEn }[lang] || skill?.categoryId?.nameEn);
 
   const handleBook = async () => {
     setSubmitting(true);
@@ -89,7 +89,7 @@ const BookingPage = () => {
               {/* CHANGED: s.id → s._id */}
               {worker.skills?.slice(0, 2).map(s => (
                 <span key={s._id} className="badge badge-primary" style={{ fontSize: 11 }}>
-                  {s.category?.iconEmoji} {getSkillName(s)}
+                  {s.categoryId?.iconEmoji} {getSkillName(s)}
                 </span>
               ))}
               {worker.isVerified && <span className="badge badge-verified" style={{ fontSize: 11 }}>✅ Verified</span>}

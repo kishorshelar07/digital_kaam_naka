@@ -90,7 +90,7 @@ const WorkerProfilePage = () => {
             {worker.skills.map(skill => (
               <span key={skill._id} className={`badge ${levelColor[skill.level] || 'badge-secondary'}`}
                 style={{ fontSize: 13, padding: '6px 14px' }}>
-                {skill.category?.iconEmoji || ''} {getCatName(skill.category || {})} — {levelLabel[skill.level] || ''}
+                {skill.categoryId?.iconEmoji || ''} {getCatName(skill.categoryId || {})} — {levelLabel[skill.level] || ''}
               </span>
             ))}
           </div>

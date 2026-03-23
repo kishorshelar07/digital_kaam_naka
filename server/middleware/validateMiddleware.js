@@ -47,7 +47,7 @@ const schemas = {
 
   setAvailability: Joi.object({
     isAvailable: Joi.boolean().required(),
-    date: Joi.date().iso().required(),
+    date: Joi.date().iso().optional(),
     startTime: Joi.string().optional(),
     endTime: Joi.string().optional(),
     latitude: Joi.number().optional(),
