@@ -457,13 +457,12 @@ const Login = () => {
               <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
                 Password विसरलात?
               </p>
-              <button
-                onClick={doSendOtp}
-                disabled={loading}
-                style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
+              <Link
+                to="/forgot-password"
+                style={{ fontSize: 14, color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none' }}
               >
-                📱 OTP ने login करा
-              </button>
+                🔑 Password Reset करा
+              </Link>
             </div>
           </div>
         )}

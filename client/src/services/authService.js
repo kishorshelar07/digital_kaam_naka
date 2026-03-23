@@ -8,14 +8,16 @@
 import api from './api';
 
 export const authService = {
-  checkUser:        (phone)             => api.post('/auth/check-user',     { phone }),
-  sendOtp:          (phone)             => api.post('/auth/send-otp',       { phone }),
-  verifyOtp:        (phone, otp)        => api.post('/auth/verify-otp',     { phone, otp }),
-  loginWithPassword:(phone, password)   => api.post('/auth/login-password', { phone, password }),
-  register:         (formData)          => api.post('/auth/register',        formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  logout:           ()                  => api.post('/auth/logout'),
-  getMe:            ()                  => api.get('/auth/me'),
-  refreshToken:     ()                  => api.post('/auth/refresh-token'),
+  checkUser:        (phone)                       => api.post('/auth/check-user',      { phone }),
+  sendOtp:          (phone)                       => api.post('/auth/send-otp',        { phone }),
+  verifyOtp:        (phone, otp)                  => api.post('/auth/verify-otp',      { phone, otp }),
+  loginWithPassword:(phone, password)             => api.post('/auth/login-password',  { phone, password }),
+  forgotPassword:   (phone)                       => api.post('/auth/forgot-password', { phone }),
+  resetPassword:    (phone, otp, newPassword)     => api.post('/auth/reset-password',  { phone, otp, newPassword }),
+  register:         (formData)                    => api.post('/auth/register',         formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  logout:           ()                            => api.post('/auth/logout'),
+  getMe:            ()                            => api.get('/auth/me'),
+  refreshToken:     ()                            => api.post('/auth/refresh-token'),
 };
 
 /**

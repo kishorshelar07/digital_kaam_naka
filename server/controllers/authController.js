@@ -420,6 +420,105 @@ const refreshToken = async (req, res) => {
   }
 };
 
+// ── FORGOT PASSWORD — OTP पाठवा ──────────────────────────────
+const forgotPassword = async (req, res) => {
+  try {
+    const { phone } = req.body;
+
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return sendError(res, 'कृपया valid 10 अंकी mobile number टाका.', 400);
+    }
+
+    const user = await User.findOne({ phone }).select('+otp +otpExpires +otpAttempts +otpBlockedUntil');
+
+    // User नाही किंवा registration pending आहे
+    if (!user || user.name === 'Pending Registration') {
+      return sendError(res, 'हा number registered नाही. आधी नोंदणी करा.', 404);
+    }
+
+    // Block check
+    if (user.otpBlockedUntil && new Date() < new Date(user.otpBlockedUntil)) {
+      const minsLeft = Math.ceil((new Date(user.otpBlockedUntil) - new Date()) / 60000);
+      return sendError(res, `जास्त प्रयत्न झाले. ${minsLeft} मिनिटांनी पुन्हा करा.`, 429);
+    }
+
+    const otp        = generateOTP();
+    const otpExpires = getOtpExpiry(OTP_EXPIRE_MINS);
+
+    if (process.env.NODE_ENV === 'development') {
+      logger.info(`🔑 DEV Reset OTP for ${phone}: ${otp}`);
+    }
+
+    user.otp             = otp;
+    user.otpExpires      = otpExpires;
+    user.otpAttempts     = 0;
+    user.otpBlockedUntil = null;
+    await user.save();
+
+    const smsSent = await sendOtpSMS(phone, otp, user.language || 'mr');
+
+    return sendSuccess(res, 'Password reset साठी OTP पाठवला!', {
+      phone,
+      otpSent: smsSent,
+      expiresInMinutes: OTP_EXPIRE_MINS,
+      ...(process.env.NODE_ENV === 'development' && { devOtp: otp }),
+    });
+  } catch (error) {
+    logger.error('forgotPassword error:', error);
+    return sendError(res, 'OTP पाठवता आला नाही. पुन्हा प्रयत्न करा.', 500);
+  }
+};
+
+// ── RESET PASSWORD — OTP verify + नवीन password set ─────────
+const resetPassword = async (req, res) => {
+  try {
+    const { phone, otp, newPassword } = req.body;
+
+    if (!phone || !otp || !newPassword) {
+      return sendError(res, 'Phone, OTP आणि नवीन password आवश्यक आहे.', 400);
+    }
+
+    if (newPassword.length < 6) {
+      return sendError(res, 'Password किमान 6 अक्षरे असावा.', 400);
+    }
+
+    const user = await User.findOne({ phone }).select('+otp +otpExpires +otpAttempts +otpBlockedUntil +password');
+
+    if (!user || user.name === 'Pending Registration') {
+      return sendError(res, 'User सापडला नाही.', 404);
+    }
+
+    // OTP verify
+    const { valid, reason } = user.verifyOtp(otp);
+
+    if (!valid) {
+      const attempts = (user.otpAttempts || 0) + 1;
+      user.otpAttempts = attempts;
+      if (attempts >= OTP_MAX_ATTEMPTS) {
+        user.otpBlockedUntil = new Date(Date.now() + OTP_BLOCK_MINS * 60 * 1000);
+        user.otpAttempts     = 0;
+      }
+      await user.save();
+      return sendError(res, reason, 400);
+    }
+
+    // OTP clear + नवीन password set
+    user.otp             = null;
+    user.otpExpires      = null;
+    user.otpAttempts     = 0;
+    user.otpBlockedUntil = null;
+    user.password        = newPassword; // pre-save hook bcrypt करेल
+    await user.save();
+
+    logger.info(`Password reset successful for ${phone}`);
+
+    return sendSuccess(res, 'Password यशस्वीरित्या बदलला! आता नवीन password ने login करा. 🎉');
+  } catch (error) {
+    logger.error('resetPassword error:', error);
+    return sendError(res, 'Password reset अयशस्वी. पुन्हा प्रयत्न करा.', 500);
+  }
+};
+
 module.exports = {
   checkUser,
   sendOtp,
@@ -429,4 +528,6 @@ module.exports = {
   logout,
   getMe,
   refreshToken,
+  forgotPassword,
+  resetPassword,
 };

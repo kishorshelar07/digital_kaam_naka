@@ -19,6 +19,8 @@ const {
   logout,
   getMe,
   refreshToken,
+  forgotPassword,
+  resetPassword,
 } = require('../controllers/authController');
 
 const { protect }             = require('../middleware/authMiddleware');
@@ -42,11 +44,13 @@ const loginLimiter = rateLimit({
 });
 
 // ── Public routes ─────────────────────────────────────────────
-router.post('/check-user',      authLimiter,  checkUser);          // NEW: is phone registered?
+router.post('/check-user',      authLimiter,  checkUser);
 router.post('/send-otp',        authLimiter,  validators.sendOtp,   sendOtp);
 router.post('/verify-otp',      authLimiter,  validators.verifyOtp, verifyOtp);
-router.post('/login-password',  loginLimiter, loginWithPassword);   // NEW: mobile + password login
+router.post('/login-password',  loginLimiter, loginWithPassword);
 router.post('/refresh-token',   refreshToken);
+router.post('/forgot-password', authLimiter,  forgotPassword);
+router.post('/reset-password',  authLimiter,  resetPassword);
 
 // ── Protected routes (need valid JWT) ─────────────────────────
 router.post('/register', protect, uploadProfilePhoto, register);

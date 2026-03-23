@@ -17,6 +17,7 @@ import useSocket from './hooks/useSocket';
 const Home              = lazy(() => import('./pages/Home'));
 const Login             = lazy(() => import('./pages/Login'));
 const Register          = lazy(() => import('./pages/Register'));
+const ForgotPassword    = lazy(() => import('./pages/ForgotPassword'));
 const WorkerDashboard   = lazy(() => import('./pages/WorkerDashboard'));
 const EmployerDashboard = lazy(() => import('./pages/EmployerDashboard'));
 const SearchWorkers     = lazy(() => import('./pages/SearchWorkers'));
@@ -64,6 +65,7 @@ const AppContent = () => {
             <Route path="/"            element={<Home />} />
             <Route path="/login"       element={<Login />} />
             <Route path="/register"    element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/workers"     element={<SearchWorkers />} />
             <Route path="/workers/:id" element={<WorkerProfilePage />} />
             <Route path="/jobs"        element={<SearchWorkers />} />
