@@ -1,13 +1,10 @@
 /**
- * ================================================================
  * pages/Login.jsx — Login Page
  * Flow:
- *   Phone → checkUser →
- *     Not registered       → redirect to /register
- *     Registered, no pass  → send OTP → verify → Dashboard
- *     Registered, has pass → Choose (OTP | Password) → Dashboard
- * Author: Digital Kaam Naka Dev Team
- * ================================================================
+ *   Step 1: Phone number टाका
+ *   Step 2: दोन्ही options नेहमी दिसतात — OTP किंवा Password
+ *   Step 3a: OTP → verify → Dashboard
+ *   Step 3b: Password → login → Dashboard
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -26,18 +23,17 @@ const STEPS = {
 
 const Login = () => {
   const { loginSuccess, isLoggedIn } = useAuth();
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const from      = location.state?.from?.pathname || '/dashboard';
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from     = location.state?.from?.pathname || '/dashboard';
 
-  // State
-  const [step, setStep]           = useState(STEPS.PHONE);
-  const [phone, setPhone]         = useState('');
-  const [otp, setOtp]             = useState(['', '', '', '', '', '']);
-  const [password, setPassword]   = useState('');
-  const [showPass, setShowPass]   = useState(false);
-  const [loading, setLoading]     = useState(false);
-  const [countdown, setCountdown] = useState(0);
+  const [step, setStep]               = useState(STEPS.PHONE);
+  const [phone, setPhone]             = useState('');
+  const [otp, setOtp]                 = useState(['', '', '', '', '', '']);
+  const [password, setPassword]       = useState('');
+  const [showPass, setShowPass]       = useState(false);
+  const [loading, setLoading]         = useState(false);
+  const [countdown, setCountdown]     = useState(0);
   const [hasPassword, setHasPassword] = useState(false);
 
   const otpRefs = useRef([]);
@@ -47,21 +43,20 @@ const Login = () => {
     if (isLoggedIn) navigate(from, { replace: true });
   }, [isLoggedIn, navigate, from]);
 
-  // Countdown for OTP resend
+  // OTP resend countdown
   useEffect(() => {
     if (countdown <= 0) return;
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [countdown]);
 
-  // ── STEP 1: Check if phone is registered ─────────────────
+  // ── STEP 1: Phone check ──────────────────────────────────
   const handleCheckPhone = async (e) => {
     e.preventDefault();
     if (!/^[6-9]\d{9}$/.test(phone)) {
       toast.error('कृपया valid 10 अंकी mobile number टाका.');
       return;
     }
-
     setLoading(true);
     try {
       const { data } = await authService.checkUser(phone);
@@ -71,19 +66,12 @@ const Login = () => {
 
       if (!registered) {
         toast.info('हा नंबर registered नाही. आधी नोंदणी करा.');
-        navigate(`/register`, { state: { phone } });
+        navigate('/register', { state: { phone } });
         return;
       }
 
       setHasPassword(hasPwd);
-
-      if (hasPwd) {
-        // Has password → let user choose OTP or Password
-        setStep(STEPS.CHOOSE);
-      } else {
-        // No password → send OTP directly
-        await doSendOtp();
-      }
+      setStep(STEPS.CHOOSE); // नेहमी CHOOSE step दाखवतो
     } catch (err) {
       toast.error(err.response?.data?.message || 'काहीतरी चुकले. पुन्हा प्रयत्न करा.');
     } finally {
@@ -91,8 +79,9 @@ const Login = () => {
     }
   };
 
-  // ── Send OTP helper ───────────────────────────────────────
+  // ── OTP: Send ────────────────────────────────────────────
   const doSendOtp = async () => {
+    setLoading(true);
     try {
       const { data } = await authService.sendOtp(phone);
       if (data.success) {
@@ -104,31 +93,24 @@ const Login = () => {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'OTP पाठवता आला नाही.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSendOtp = async () => {
-    setLoading(true);
-    await doSendOtp();
-    setLoading(false);
-  };
-
-  // ── OTP input handlers ────────────────────────────────────
+  // ── OTP: Input handlers ──────────────────────────────────
   const handleOtpChange = (index, value) => {
     if (!/^\d?$/.test(value)) return;
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
     if (value && index < 5) otpRefs.current[index + 1]?.focus();
-    if (newOtp.every(d => d) && newOtp.join('').length === 6) {
-      handleVerifyOtp(newOtp.join(''));
-    }
+    if (newOtp.every(d => d)) handleVerifyOtp(newOtp.join(''));
   };
 
   const handleOtpKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+    if (e.key === 'Backspace' && !otp[index] && index > 0)
       otpRefs.current[index - 1]?.focus();
-    }
   };
 
   const handleOtpPaste = (e) => {
@@ -140,16 +122,14 @@ const Login = () => {
     if (pasted.length === 6) setTimeout(() => handleVerifyOtp(pasted), 50);
   };
 
-  // ── STEP OTP: Verify OTP → login ─────────────────────────
+  // ── OTP: Verify ──────────────────────────────────────────
   const handleVerifyOtp = async (otpValue = otp.join('')) => {
     if (otpValue.length !== 6) { toast.error('6 अंकी OTP टाका.'); return; }
-
     setLoading(true);
     try {
       const { data } = await authService.verifyOtp(phone, otpValue);
       if (data.success) {
         if (data.data.needsRegistration) {
-          // Should not happen on login page — but handle gracefully
           if (data.data.token) localStorage.setItem('kamnaka_token', data.data.token);
           navigate('/register', { state: { phone } });
           return;
@@ -167,11 +147,10 @@ const Login = () => {
     }
   };
 
-  // ── STEP PASSWORD: Login with password ───────────────────
+  // ── Password: Login ──────────────────────────────────────
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
     if (!password.trim()) { toast.error('Password टाका.'); return; }
-
     setLoading(true);
     try {
       const { data } = await authService.loginWithPassword(phone, password);
@@ -187,8 +166,8 @@ const Login = () => {
     }
   };
 
-  // ── Shared styles ─────────────────────────────────────────
-  const cardStyle = {
+  // ── Shared styles ────────────────────────────────────────
+  const card = {
     background: 'white',
     borderRadius: 'var(--radius-lg)',
     padding: 28,
@@ -196,20 +175,37 @@ const Login = () => {
     boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
   };
 
-  const backBtn = (onClick) => (
+  const BackBtn = ({ to }) => (
     <button
-      onClick={onClick}
+      onClick={() => setStep(to)}
       style={{
         background: 'none', border: 'none', color: 'var(--color-primary)',
-        cursor: 'pointer', fontWeight: 600, fontSize: 14, padding: '0 0 12px 0',
-        display: 'flex', alignItems: 'center', gap: 4,
+        cursor: 'pointer', fontWeight: 600, fontSize: 14,
+        padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4,
       }}
     >
       ← मागे जा
     </button>
   );
 
-  // ── Render ────────────────────────────────────────────────
+  const PhonePill = () => (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      background: 'var(--color-secondary-light)', borderRadius: 'var(--radius-full)',
+      padding: '4px 12px', marginBottom: 20, fontSize: 14, fontWeight: 600,
+      color: 'var(--color-secondary)',
+    }}>
+      📱 +91 {phone}
+      <button
+        onClick={() => setStep(STEPS.PHONE)}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--color-primary)', fontWeight: 700, padding: 0 }}
+      >
+        बदला
+      </button>
+    </div>
+  );
+
+  // ── Render ───────────────────────────────────────────────
   return (
     <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ width: '100%', maxWidth: 420 }}>
@@ -225,9 +221,9 @@ const Login = () => {
           </p>
         </div>
 
-        {/* ── STEP: Phone ──────────────────────────────────── */}
+        {/* ── STEP 1: Phone ──────────────────────────────── */}
         {step === STEPS.PHONE && (
-          <div style={cardStyle} className="fade-in">
+          <div style={card} className="fade-in">
             <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>लॉग इन करा</h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 24 }}>
               तुमचा mobile number टाका
@@ -240,7 +236,9 @@ const Login = () => {
                     padding: '12px 14px', border: '2px solid var(--color-border)',
                     borderRadius: 'var(--radius-md)', fontWeight: 600,
                     color: 'var(--color-text-muted)', flexShrink: 0, fontSize: 15,
-                  }}>🇮🇳 +91</div>
+                  }}>
+                    🇮🇳 +91
+                  </div>
                   <input
                     type="tel"
                     inputMode="numeric"
@@ -262,7 +260,6 @@ const Login = () => {
                 {loading ? <Loader text="तपासत आहे..." /> : 'पुढे →'}
               </button>
             </form>
-
             <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--color-text-muted)' }}>
               नवीन आहात?{' '}
               <Link to="/register" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
@@ -272,72 +269,87 @@ const Login = () => {
           </div>
         )}
 
-        {/* ── STEP: Choose OTP or Password ─────────────────── */}
+        {/* ── STEP 2: Choose Method ───────────────────────── */}
         {step === STEPS.CHOOSE && (
-          <div style={cardStyle} className="fade-in">
-            {backBtn(() => setStep(STEPS.PHONE))}
-            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Login पद्धत निवडा</h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 24 }}>
-              +91 {phone}
+          <div style={card} className="fade-in">
+            <BackBtn to={STEPS.PHONE} />
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Login पद्धत निवडा</h2>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>
+              कोणत्याही एका पद्धतीने login करा
             </p>
+            <PhonePill />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* OTP Option */}
+
+              {/* OTP Option — नेहमी available */}
               <button
-                onClick={handleSendOtp}
+                onClick={doSendOtp}
                 disabled={loading}
                 style={{
                   padding: 20, border: '2px solid var(--color-primary)',
                   borderRadius: 'var(--radius-lg)', cursor: 'pointer',
                   background: 'var(--color-primary-light)', textAlign: 'left',
                   display: 'flex', alignItems: 'center', gap: 16,
+                  opacity: loading ? 0.7 : 1,
                 }}
               >
-                <span style={{ fontSize: 32 }}>📱</span>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-primary)' }}>
+                <span style={{ fontSize: 32, flexShrink: 0 }}>📱</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--color-primary)' }}>
                     OTP ने login करा
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                    SMS / WhatsApp वर OTP येईल
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                    SMS / WhatsApp वर 6 अंकी OTP येईल
                   </div>
                 </div>
-                {loading && <Loader />}
+                {loading ? <Loader /> : <span style={{ color: 'var(--color-primary)', fontSize: 18 }}>→</span>}
               </button>
 
               {/* Password Option */}
               <button
-                onClick={() => setStep(STEPS.PASSWORD)}
+                onClick={() => {
+                  if (!hasPassword) {
+                    toast.info('तुम्ही अजून password set केला नाही. OTP ने login करा किंवा Settings मध्ये password set करा.');
+                    return;
+                  }
+                  setStep(STEPS.PASSWORD);
+                }}
                 style={{
-                  padding: 20, border: '2px solid var(--color-border)',
-                  borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-                  background: 'white', textAlign: 'left',
-                  display: 'flex', alignItems: 'center', gap: 16,
+                  padding: 20,
+                  border: `2px solid ${hasPassword ? 'var(--color-border)' : 'var(--color-border-light)'}`,
+                  borderRadius: 'var(--radius-lg)', cursor: hasPassword ? 'pointer' : 'default',
+                  background: hasPassword ? 'white' : 'var(--color-bg)',
+                  textAlign: 'left', display: 'flex', alignItems: 'center', gap: 16,
+                  opacity: hasPassword ? 1 : 0.6,
                 }}
               >
-                <span style={{ fontSize: 32 }}>🔐</span>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-secondary)' }}>
+                <span style={{ fontSize: 32, flexShrink: 0 }}>🔐</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--color-secondary)' }}>
                     Password ने login करा
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                    तुमचा password टाका
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                    {hasPassword
+                      ? 'तुमचा set केलेला password टाका'
+                      : 'Password set केला नाही — आधी OTP ने login करा'}
                   </div>
                 </div>
+                {hasPassword && <span style={{ color: 'var(--color-text-muted)', fontSize: 18 }}>→</span>}
               </button>
             </div>
           </div>
         )}
 
-        {/* ── STEP: OTP Verify ─────────────────────────────── */}
+        {/* ── STEP 3a: OTP Verify ────────────────────────── */}
         {step === STEPS.OTP && (
-          <div style={cardStyle} className="fade-in">
-            {backBtn(() => setStep(hasPassword ? STEPS.CHOOSE : STEPS.PHONE))}
+          <div style={card} className="fade-in">
+            <BackBtn to={STEPS.CHOOSE} />
             <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>OTP टाका</h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 4 }}>
-              +91 {phone} वर 6 अंकी OTP पाठवला.
+            <PhonePill />
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 4 }}>
+              वरील number वर 6 अंकी OTP पाठवला आहे.
             </p>
-            <p style={{ color: 'var(--color-primary)', fontSize: 13, fontWeight: 600, marginBottom: 24 }}>
+            <p style={{ color: 'var(--color-primary)', fontSize: 13, fontWeight: 600, marginBottom: 20 }}>
               💡 SMS किंवा WhatsApp तपासा
             </p>
 
@@ -378,10 +390,10 @@ const Login = () => {
             {/* Resend */}
             <div style={{ textAlign: 'center', marginTop: 16, fontSize: 14, color: 'var(--color-text-muted)' }}>
               {countdown > 0
-                ? <span>{countdown}s नंतर पुन्हा पाठवा</span>
+                ? <span>OTP पुन्हा पाठवण्यासाठी {countdown}s थांबा</span>
                 : (
                   <button
-                    onClick={handleSendOtp}
+                    onClick={doSendOtp}
                     disabled={loading}
                     style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
                   >
@@ -393,14 +405,12 @@ const Login = () => {
           </div>
         )}
 
-        {/* ── STEP: Password Login ──────────────────────────── */}
+        {/* ── STEP 3b: Password Login ─────────────────────── */}
         {step === STEPS.PASSWORD && (
-          <div style={cardStyle} className="fade-in">
-            {backBtn(() => setStep(STEPS.CHOOSE))}
+          <div style={card} className="fade-in">
+            <BackBtn to={STEPS.CHOOSE} />
             <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Password टाका</h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 24 }}>
-              +91 {phone}
-            </p>
+            <PhonePill />
 
             <form onSubmit={handlePasswordLogin}>
               <div className="form-group">
@@ -413,7 +423,7 @@ const Login = () => {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     autoFocus
-                    style={{ paddingRight: 44 }}
+                    style={{ paddingRight: 48 }}
                   />
                   <button
                     type="button"
@@ -437,26 +447,22 @@ const Login = () => {
               </button>
             </form>
 
-            <div style={{ textAlign: 'center', marginTop: 16 }}>
+            {/* Password विसरला? OTP वापर */}
+            <div style={{
+              marginTop: 16, padding: 14,
+              background: 'var(--color-bg)', borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              textAlign: 'center',
+            }}>
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
+                Password विसरलात?
+              </p>
               <button
-                onClick={handleSendOtp}
+                onClick={doSendOtp}
                 disabled={loading}
                 style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
               >
                 📱 OTP ने login करा
-              </button>
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: 8 }}>
-              <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                Password विसरलात?{' '}
-              </span>
-              <button
-                onClick={handleSendOtp}
-                disabled={loading}
-                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}
-              >
-                OTP ने reset करा
               </button>
             </div>
           </div>
