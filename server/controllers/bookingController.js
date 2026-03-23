@@ -57,90 +57,64 @@ const populateBooking = (query) =>
 // ── CREATE BOOKING ────────────────────────────────────────────
 
 const createBooking = async (req, res) => {
-  // CHANGED: sequelize.transaction() → mongoose.startSession()
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const { workerId, jobPostId, startDate, endDate, totalDays, agreedRate, bookingNote } = req.body;
 
-    // CHANGED: Employer.findOne({ where: { userId } }) → Employer.findOne({ userId })
-    const employer = await Employer.findOne({ userId: req.user._id }).session(session);
+    const employer = await Employer.findOne({ userId: req.user._id });
     if (!employer) return sendError(res, 'Employer profile not found', 404);
 
-    // CHANGED: Worker.findByPk(workerId, { include: [User] }) → Worker.findById().populate()
     const worker = await Worker.findById(workerId)
-      .populate({ path: 'userId', select: 'name phone language fcmToken' })
-      .session(session);
+      .populate({ path: 'userId', select: 'name phone language fcmToken' });
     if (!worker) return sendError(res, 'Worker not found', 404);
 
-    // CHANGED: Booking.findOne({ where: { workerId, status: { [Op.in]: [...] }, startDate } })
-    //       → Booking.findOne({ workerId, status: { $in: [...] }, startDate })
     const existingBooking = await Booking.findOne({
       workerId: worker._id,
-      status: { $in: ['accepted', 'started'] }, // CHANGED: Op.in → $in
+      status: { $in: ['accepted', 'started'] },
       startDate: new Date(startDate),
-    }).session(session);
+    });
 
     if (existingBooking) {
-      await session.abortTransaction();
-      session.endSession();
       return sendError(res, 'Worker is already booked on this date', 409);
     }
 
     const totalAmount = parseFloat(agreedRate) * parseInt(totalDays || 1);
 
-    // Booking.create() stays the same syntax in Mongoose, but pass session
-    const [booking] = await Booking.create(
-      [{
-        jobPostId: jobPostId || null,
-        workerId: worker._id,
-        employerId: employer._id,
-        startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : new Date(startDate),
-        totalDays: parseInt(totalDays) || 1,
-        agreedRate: parseFloat(agreedRate),
-        totalAmount,
-        bookingNote: bookingNote || '',
-        status: 'pending',
-      }],
-      { session }
-    );
+    const booking = await Booking.create({
+      jobPostId: jobPostId || null,
+      workerId: worker._id,
+      employerId: employer._id,
+      startDate: new Date(startDate),
+      endDate: endDate ? new Date(endDate) : new Date(startDate),
+      totalDays: parseInt(totalDays) || 1,
+      agreedRate: parseFloat(agreedRate),
+      totalAmount,
+      bookingNote: bookingNote || '',
+      status: 'pending',
+    });
 
     // If from a job post, increment workers booked
     if (jobPostId) {
-      const jobPost = await JobPost.findById(jobPostId).session(session);
+      const jobPost = await JobPost.findById(jobPostId);
       if (jobPost) {
         const newBookedCount = (jobPost.workersBooked || 0) + 1;
         const newStatus = newBookedCount >= jobPost.workersNeeded ? 'filled' : 'partially_filled';
-        // CHANGED: jobPost.update({}) → findByIdAndUpdate($inc + set)
-        await JobPost.findByIdAndUpdate(
-          jobPostId,
-          { workersBooked: newBookedCount, status: newStatus },
-          { session }
-        );
+        await JobPost.findByIdAndUpdate(jobPostId, { workersBooked: newBookedCount, status: newStatus });
       }
     }
 
     // Create pending payment record
-    const platformFee = parseFloat((totalAmount * 0.05).toFixed(2));
-    await Payment.create(
-      [{
-        bookingId: booking._id,
-        employerId: employer._id,
-        workerId: worker._id,
-        amount: totalAmount,
-        platformFee,
-        workerAmount: totalAmount - platformFee,
-        status: 'pending',
-        method: 'cash',
-      }],
-      { session }
-    );
-
-    // CHANGED: t.commit() → session.commitTransaction()
-    await session.commitTransaction();
-    session.endSession();
+    const feePercent = parseFloat(process.env.PLATFORM_FEE_PERCENT) || 5;
+    const platformFee = parseFloat((totalAmount * feePercent / 100).toFixed(2));
+    await Payment.create({
+      bookingId: booking._id,
+      employerId: employer._id,
+      workerId: worker._id,
+      amount: totalAmount,
+      platformFee,
+      workerAmount: totalAmount - platformFee,
+      status: 'pending',
+      method: 'cash',
+    });
 
     // ── Post-transaction notifications ────────────────────────
     // CHANGED: User.findByPk() → User.findById()
@@ -186,9 +160,6 @@ const createBooking = async (req, res) => {
     const fullBooking = await populateBooking(Booking.findById(booking._id));
     return sendSuccess(res, 'Booking request sent successfully!', fullBooking, 201);
   } catch (error) {
-    // CHANGED: t.rollback() → session.abortTransaction()
-    await session.abortTransaction();
-    session.endSession();
     logger.error('createBooking error:', error.message);
     return sendError(res, 'Failed to create booking: ' + error.message, 500);
   }
@@ -340,16 +311,11 @@ const startWork = async (req, res) => {
 // ── MARK WORK COMPLETED ───────────────────────────────────────
 
 const completeWork = async (req, res) => {
-  // CHANGED: sequelize.transaction() → mongoose.startSession()
-  const session = await mongoose.startSession();
-  session.startTransaction();
   try {
-    const booking = await populateBooking(
-      Booking.findById(req.params.id).session(session)
-    );
+    const booking = await populateBooking(Booking.findById(req.params.id));
 
-    if (!booking) { await session.abortTransaction(); session.endSession(); return sendError(res, 'Booking not found', 404); }
-    if (booking.status !== 'started') { await session.abortTransaction(); session.endSession(); return sendError(res, 'Work must be started before completing', 400); }
+    if (!booking) return sendError(res, 'Booking not found', 404);
+    if (booking.status !== 'started') return sendError(res, 'Work must be started before completing', 400);
 
     const workerUserId = booking.workerId.userId._id;
     const employerUserId = booking.employerId.userId._id;
@@ -357,32 +323,22 @@ const completeWork = async (req, res) => {
     const isWorker = workerUserId.toString() === req.user._id.toString();
     const isEmployer = employerUserId.toString() === req.user._id.toString();
     if (!isWorker && !isEmployer && req.user.role !== 'admin') {
-      await session.abortTransaction();
-      session.endSession();
       return sendError(res, 'Not authorized', 403);
     }
 
     booking.status = 'completed';
     booking.workEndedAt = new Date();
-    await booking.save({ session });
+    await booking.save();
 
-    // CHANGED: Worker.increment({ totalJobs: 1 }) → Worker.findByIdAndUpdate($inc)
     await Worker.findByIdAndUpdate(
       booking.workerId._id,
-      { $inc: { totalJobs: 1, totalEarnings: booking.totalAmount * 0.95 } },
-      { session }
+      { $inc: { totalJobs: 1, totalEarnings: booking.totalAmount * 0.95 } }
     );
 
-    // CHANGED: Employer.increment({ totalHires: 1 }) → Employer.findByIdAndUpdate($inc)
     await Employer.findByIdAndUpdate(
       booking.employerId._id,
-      { $inc: { totalHires: 1, totalSpent: booking.totalAmount } },
-      { session }
+      { $inc: { totalHires: 1, totalSpent: booking.totalAmount } }
     );
-
-    // CHANGED: t.commit() → session.commitTransaction()
-    await session.commitTransaction();
-    session.endSession();
 
     const workerUser = booking.workerId.userId;
     const employerUser = booking.employerId.userId;
@@ -406,8 +362,6 @@ const completeWork = async (req, res) => {
 
     return sendSuccess(res, 'Work marked as completed! 🎉 Please proceed to payment and rating.', booking);
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
     logger.error('completeWork error:', error);
     return sendError(res, 'Failed to complete booking', 500);
   }
